@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-跨隔离的 Git worktree 协调长期运行的 Codex App 研发任务，并通过经过评审的 Pull Request 或 Merge Request 完成交付。
+跨隔离的 Git worktree 协调长期运行的 Codex App 研发任务，通过经过评审的 Pull Request 或 Merge Request 完成交付，并在不丢失可恢复工作的前提下安全退役已完成通道。
 
 这个技能帮助一个统一协调任务把工作拆分为持久的交付通道，明确分支和评审所有权，并判断哪些工作适合交给短期子智能体，哪些工作需要进入拥有独立 worktree 的用户可见 Codex App 任务。
 

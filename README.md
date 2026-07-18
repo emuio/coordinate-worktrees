@@ -2,7 +2,7 @@
 
 [简体中文](README_CN.md)
 
-Coordinate long-running Codex App delivery across isolated Git worktrees and reviewed pull or merge requests.
+Coordinate long-running Codex App delivery across isolated Git worktrees and reviewed pull or merge requests, then retire completed lanes without discarding recoverable work.
 
 This skill helps one coordinator task divide work into durable delivery lanes, keep branch and review ownership explicit, and decide when a short-lived subagent is enough versus when a user-visible Codex App task needs its own worktree.
 

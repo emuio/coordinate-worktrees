@@ -1,6 +1,6 @@
 ---
 name: coordinate-worktrees
-description: Coordinate persistent Codex App tasks across isolated Git worktrees, parallel or stacked merge requests or pull requests, progress steering, review handbacks, and coordinator-owned merge decisions. Use when delivery must remain user-visible, resumable, and independently reviewable, or when deciding whether work belongs in a short-lived subagent or a persistent worktree task.
+description: Coordinate persistent Codex App tasks across isolated Git worktrees, parallel or stacked merge requests or pull requests, progress steering, review handbacks, coordinator-owned merge decisions, and safe lane retirement. Use when delivery must remain user-visible, resumable, and independently reviewable, when deciding whether work belongs in a short-lived subagent or persistent worktree task, or when safely cleaning up completed worktrees and branches.
 ---
 
 # Coordinate Worktrees
@@ -86,9 +86,26 @@ Completion criterion: the coordinator has current test evidence, both review axe
 3. Create dependent integration tasks only from the updated integration branch, never from the original base.
 4. Run the full repository gates and required manual smoke tests on the integrated result.
 5. Review the umbrella MR against the authoritative spec and the final base. Merge it only when the user authorized the coordinator to decide; otherwise report readiness and wait.
-6. Unpin or archive completed App tasks only after their work is merged or deliberately abandoned.
+6. Retire completed lanes only after their work is merged or deliberately abandoned, following the safety checks below.
 
 Completion criterion: the final branch contains only reviewed child work, full gates reflect the integrated tree, manual checks are honestly reported, and no required MR or task remains unresolved.
+
+## Retire completed lanes safely
+
+1. Resolve the lane from the ledger. Record its owner, App task, absolute worktree path, branch, HEAD, MR, target branch, and whether the worktree is App-managed or manual.
+2. Verify retirement with read-only evidence:
+   - the MR is merged, or abandonment is explicit and its HEAD is preserved on a recoverable remote ref;
+   - the target branch contains the intended HEAD or merge commit;
+   - the owning task is no longer running;
+   - `git worktree list --porcelain` maps the exact path to the expected branch and HEAD;
+   - `git -C <absolute-worktree-path> status --porcelain` is empty.
+3. Stop and report instead of cleaning when the path, branch, or HEAD differs from the ledger; the worktree is dirty; the branch is unmerged or unpushed; another task owns it; or abandonment would discard unrecoverable work.
+4. For an App-managed worktree, unpin and archive the task after verification. Do not assume archiving removes the physical worktree, and do not manually remove a worktree still owned by Codex App. Use an App-provided lifecycle or handoff operation when available; otherwise leave physical cleanup to the App and record that state.
+5. For a coordinator-owned manual worktree, remove only the verified absolute path with `git worktree remove <absolute-worktree-path>`, then run `git worktree prune`. Never use a glob, unresolved variable, broad parent directory, `rm -rf`, or `git worktree remove --force` as the default cleanup path.
+6. Delete a local lane branch only after its merged state is verified. Delete a remote branch only when repository policy or explicit user authorization permits it. Retire an integration branch only after the umbrella MR is merged and no open child MR still targets it.
+7. Mark the ledger entry `retired` and record the merge or preservation ref, task archive state, worktree disposition, branch disposition, and cleanup timestamp.
+
+Completion criterion: all retired work remains recoverable from the merged target or recorded remote ref, no dirty or actively owned worktree was removed, and the ledger matches the remaining App tasks, worktrees, and branches.
 
 ## Guardrails
 
@@ -97,3 +114,4 @@ Completion criterion: the final branch contains only reviewed child work, full g
 - Keep secrets and credentials out of prompts, repository files, logs, and MR descriptions.
 - Treat branch/MR ownership as the durable control plane; never infer durable ownership from a session or thread handle alone.
 - Separate read-only observation from actions that push, merge, close, or mutate external systems.
+- Never trade cleanup convenience for recoverability; leave uncertain lanes in place and report the exact blocking evidence.
