@@ -21,13 +21,24 @@ Use a subagent only when shared filesystem access cannot create edit conflicts. 
 
 Treat an explicit request to dispatch work to other user-visible tasks as authorization to create those App tasks. If that authorization is absent, ask before calling `codex_app__create_thread`.
 
+## Choose model and reasoning settings
+
+Choose the execution surface first; model and reasoning settings are a secondary decision. Do not present automatic difficulty-based model routing as a Codex default.
+
+| Surface | Default behavior | Coordinator rule |
+| --- | --- | --- |
+| Full-history collaboration subagent | Inherits the parent task's current model and reasoning effort | Keep inheritance unless the user, applicable instructions, or the selected skill explicitly requires an override and the spawn form permits it |
+| New Codex App task | Uses configured defaults when model and reasoning overrides are omitted; it does not inherit the coordinator task's transient settings | Do not silently pin or change settings; when the choice materially affects the work, state the expected default and obtain an explicit choice before overriding it |
+
+Record the model, reasoning effort, and their source when known: inherited, configured default, or explicitly pinned. Do not add project or global custom agents merely to route persistent App tasks; those tasks have their own configuration path.
+
 ## Establish the delivery graph
 
 1. Read repository instructions, the approved design/spec, and the implementation plan.
 2. Identify the real repository root, current dirty state, remote, base branch, and fixed base SHA. Preserve unrelated user changes.
 3. Partition work by dependency and file ownership. Put overlapping files in one lane or define a merge order; do not rely on agents to reconcile concurrent shared edits.
 4. Create or select an integration branch. For a multi-MR delivery, open a Draft umbrella MR from integration to the final base before implementation begins.
-5. Record a ledger for every lane: scope, dependencies, App thread ID, worktree, branch, base SHA, MR target, MR URL, HEAD, tests, and status.
+5. Record a ledger for every lane: scope, dependencies, execution surface, model and reasoning source when known, App thread ID, worktree, branch, base SHA, MR target, MR URL, HEAD, tests, and status.
 
 Creating a remote repository or changing repository visibility is external state. Do it only when the user already authorized that outcome or after confirmation.
 
@@ -37,6 +48,7 @@ Completion criterion: every implementation unit has one owner, an explicit base,
 
 1. Resolve the saved project with `codex_app__list_projects`.
 2. Create the task with `codex_app__create_thread`, target the project, choose the native `worktree` environment, and set `startingState.branchName` to the existing integration branch or required parent branch. Prefer the App's native worktree over manual `git worktree` commands.
+   Unless the user explicitly selected a model or reasoning level, leave those overrides unset so the task uses configured defaults.
 3. Give the task a searchable title and pin it while active.
 4. Send a self-contained brief containing:
    - role: independent main task, not a one-shot worker;
@@ -57,11 +69,12 @@ Completion criterion: the task is visible in Codex App, attached to its own work
 
 ## Coordinate without taking ownership away
 
-- Inspect progress with `codex_app__read_thread`; use `codex_app__list_threads` only to relocate a handle.
+- Follow progress with bounded `wait_threads` calls. Use one call for one to eight targets, pass each target's latest cursor, and use `timeoutMs: 0` for an immediate compact snapshot.
+- Use `read_thread` only when the full transcript or diagnostic detail is required; use `list_threads` only to relocate a handle.
 - Send corrections with `codex_app__send_message_to_thread` when scope, branch, test evidence, or ownership drifts.
 - Send baseline failures to every affected lane so workers separate pre-existing failures from regressions.
 - Let the owning task implement its fixes. Do not patch its worktree from the coordinator unless ownership is explicitly transferred.
-- Avoid noisy polling. Read at meaningful checkpoints: branch creation, first vertical slice, gate completion, MR creation, and requested-fix completion.
+- Wait at meaningful checkpoints: branch creation, first vertical slice, gate completion, MR creation, and requested-fix completion. Do not narrate unchanged snapshots or answer approval and user-input requests on behalf of the user.
 - Keep the user informed of lane state and review decisions, not raw internal chatter.
 
 Completion criterion: each active lane has one current owner and the ledger matches its actual branch, HEAD, and MR state.

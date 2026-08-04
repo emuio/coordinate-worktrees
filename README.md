@@ -57,6 +57,14 @@ Typical requests include:
 
 The coordinator owns the delivery graph, integration state, review decisions, and final merge. Each implementation lane owns its branch, commits, checks, and review fixes, but does not merge itself.
 
+## Model and reasoning settings
+
+Choose the execution surface before choosing model or reasoning settings. A full-history collaboration subagent inherits the parent task's current settings. A newly created Codex App task is independent and uses configured defaults unless the user explicitly pins overrides; it does not inherit the coordinator task's transient settings.
+
+The coordinator records whether settings were inherited, came from configured defaults, or were explicitly pinned. The skill does not treat automatic difficulty-based model routing as a Codex default and does not silently override the user's configuration.
+
+For progress tracking, prefer compact `wait_threads` snapshots. Use `read_thread` only when the full transcript or diagnostic detail is required, and do not report unchanged snapshots.
+
 ## Safety model
 
 - Preserve the user's Git identity and repository rules.
