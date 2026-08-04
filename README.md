@@ -57,6 +57,8 @@ Typical requests include:
 
 The coordinator owns the delivery graph, integration state, review decisions, and final merge. Each implementation lane owns its branch, commits, checks, and review fixes, but does not merge itself.
 
+New App tasks remain unpinned by default. Pin a task only when the user explicitly requests it; coordination relies on the ledger, task handle, branch, and PR or MR rather than sidebar order.
+
 ## Model and reasoning settings
 
 Choose the execution surface before choosing model or reasoning settings. A full-history collaboration subagent inherits the parent task's current settings. A newly created Codex App task is independent and uses configured defaults unless the user explicitly pins overrides; it does not inherit the coordinator task's transient settings.

@@ -49,7 +49,7 @@ Completion criterion: every implementation unit has one owner, an explicit base,
 1. Resolve the saved project with `codex_app__list_projects`.
 2. Create the task with `codex_app__create_thread`, target the project, choose the native `worktree` environment, and set `startingState.branchName` to the existing integration branch or required parent branch. Prefer the App's native worktree over manual `git worktree` commands.
    Unless the user explicitly selected a model or reasoning level, leave those overrides unset so the task uses configured defaults.
-3. Give the task a searchable title and pin it while active.
+3. Give the task a searchable title. Leave it unpinned unless the user explicitly requests pinning; do not use sidebar order as coordination state.
 4. Send a self-contained brief containing:
    - role: independent main task, not a one-shot worker;
    - exact scope, owned files/modules, and excluded scope;
@@ -113,7 +113,7 @@ Completion criterion: the final branch contains only reviewed child work, full g
    - `git worktree list --porcelain` maps the exact path to the expected branch and HEAD;
    - `git -C <absolute-worktree-path> status --porcelain` is empty.
 3. Stop and report instead of cleaning when the path, branch, or HEAD differs from the ledger; the worktree is dirty; the branch is unmerged or unpushed; another task owns it; or abandonment would discard unrecoverable work.
-4. For an App-managed worktree, unpin and archive the task after verification. Do not assume archiving removes the physical worktree, and do not manually remove a worktree still owned by Codex App. Use an App-provided lifecycle or handoff operation when available; otherwise leave physical cleanup to the App and record that state.
+4. For an App-managed worktree, archive the task after verification when retirement is authorized. Do not change its pin state unless the user explicitly requests it. Do not assume archiving removes the physical worktree, and do not manually remove a worktree still owned by Codex App. Use an App-provided lifecycle or handoff operation when available; otherwise leave physical cleanup to the App and record that state.
 5. For a coordinator-owned manual worktree, remove only the verified absolute path with `git worktree remove <absolute-worktree-path>`, then run `git worktree prune`. Never use a glob, unresolved variable, broad parent directory, `rm -rf`, or `git worktree remove --force` as the default cleanup path.
 6. Delete a local lane branch only after its merged state is verified. Delete a remote branch only when repository policy or explicit user authorization permits it. Retire an integration branch only after the umbrella MR is merged and no open child MR still targets it.
 7. Mark the ledger entry `retired` and record the merge or preservation ref, task archive state, worktree disposition, branch disposition, and cleanup timestamp.

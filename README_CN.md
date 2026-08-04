@@ -57,6 +57,8 @@ python3 "${CODEX_HOME:-$HOME/.codex}/skills/.system/skill-installer/scripts/inst
 
 协调者负责交付图、集成状态、评审决策和最终合并。每个实现通道负责自己的分支、commit、检查和评审修复，但不得自行合并。
 
+新建 App 任务默认不置顶；只有用户明确要求时才置顶。协调关系依靠台账、task handle、分支和 PR/MR 维护，而不是依赖侧边栏顺序。
+
 ## 模型与推理强度
 
 先选择执行载体，再选择模型和推理强度。使用完整父任务历史的 collaboration subagent 会继承父任务当前设置；新建的 Codex App 任务是独立任务，除非用户明确指定覆盖值，否则使用配置默认值，不继承协调任务的临时设置。
