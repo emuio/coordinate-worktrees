@@ -31,16 +31,16 @@ The coordinator retains handoff reading, partitioning, dispatch, ledger maintena
 
 Record the listener outside the Git lane list with:
 
-- `coordinatorThreadId`, `coordinatorProjectId` (including an explicit empty value), and its `hostId`;
+- `coordinatorTitle`, exact `coordinatorThreadId`, `coordinatorHostId`, and `coordinatorProjectId` (including an explicit empty value);
 - `listenerThreadId`, `listenerProjectId`, its `hostId`, effective `model` and `reasoning`, plus `modelSource` and `reasoningSource`;
 - active targets as task name, `threadId`, `hostId`, and latest cursor;
 - `listenerLifecycle`, such as `creating`, `active-wait`, `migration-pending`, `superseded-retained`, or `archived`.
 
 ## Follow the event-driven protocol
 
-1. Give the listener the coordinator task's exact `threadId`, `hostId`, and `projectId` when present; record the project ID as empty when the existing coordinator is unassociated. Add each initial target's task name, `threadId`, `hostId`, and latest cursor when one exists.
-2. Maintain an active target set and cursor per target. Accept later messages that add targets from the same project without discarding targets already active. Do not add a ninth active target or a target from another project.
-3. Call `wait_threads` with the active targets and their latest cursors. Re-enter the event wait after a timeout using returned cursors, but do not emit fixed-period heartbeats, repeatedly call `read_thread`, or narrate unchanged state. Use `read_thread` only if the wait result lacks the final summary needed for the permitted notification.
+1. Give the listener the coordinator task's title, exact `threadId` and `hostId`, and its `projectId` when present; record the project ID as empty when the existing coordinator is unassociated. The exact thread and host are the notification address—never infer the destination from title or project association. Add each initial target's task name, `threadId`, `hostId`, and latest cursor when one exists.
+2. Maintain an active target set and cursor per target. Treat later target messages as additive: add same-project targets without discarding active ones. Remove, pause, or replace a nonterminal target only when the message explicitly names it and requests that lifecycle change. Do not add a ninth active target or a target from another project.
+3. Call `wait_threads` with the active targets and their latest cursors. A new message may end the current wait early; after handling it, rebuild the active target and cursor map and resume the event wait. Do not emit fixed-period heartbeats, repeatedly call `read_thread`, or narrate unchanged state. Use `read_thread` only if the wait result lacks the final summary needed for the permitted notification.
 4. On completion, send the coordinator only the task name, `threadId`, terminal status, and final summary. On a blocker or request for input, send only a minimal attention notice with the task name, `threadId`, status, and requested decision. Never send progress chatter or perform acceptance.
 5. Each completion or attention notice is one logical notification. A failed or timed-out `send_message_to_thread` call does not prove delivery; retry at most once as transport recovery. If the retry also fails or times out, state clearly in the listener task that the notification was not delivered and never record it as delivered.
 6. After a terminal status, complete the notification attempt and remove that target. Continue waiting for the remaining active targets. When none remain, stay available for later same-project targets without inventing a heartbeat schedule.
@@ -67,9 +67,12 @@ Project classification:
 - projectId: <PROJECT_ID>
 
 Notify only this project coordinator:
+- coordinator title: <COORDINATOR_TITLE>
 - coordinator threadId: <COORDINATOR_THREAD_ID>
 - coordinator projectId: <COORDINATOR_PROJECT_ID_OR_NONE>
 - coordinator hostId: <COORDINATOR_HOST_ID>
+
+Use the exact coordinator threadId and hostId above for notifications. Never infer the destination from its title or projectId.
 
 Listener settings and provenance:
 - model: <EFFECTIVE_MODEL>
@@ -85,7 +88,7 @@ Initial active targets:
 
 Observe only with event-driven wait_threads calls. Keep the latest cursor per target, pass cursors into later waits, and keep at most eight active targets. Do not use a fixed-period heartbeat or repeatedly call read_thread. A wait timeout is not completion; re-enter the event wait with current cursors and do not narrate unchanged state.
 
-Later messages may append targets from this same project. Reject cross-project targets, do not add a ninth active target, and do not drop existing active targets. After a terminal status, complete the notification attempt, remove that target, and continue observing the rest.
+Later messages are additive by default. Append targets from this same project without dropping active targets; reject cross-project targets and do not add a ninth active target. Remove, pause, or replace a nonterminal target only when a message explicitly names it and requests that lifecycle change. A new message may end the current wait early, so rebuild the active target and cursor map after handling it and resume waiting. After a terminal status, complete the notification attempt, remove that target, and continue observing the rest.
 
 You may only wait for or read task state and notify the coordinator. Do not read the repository, edit code, run tests, inspect or operate on Git or an MR or PR, deploy, perform acceptance, merge, synchronize a base checkout, retire a worktree, message implementation tasks, or answer blockers or input requests on the user's behalf.
 

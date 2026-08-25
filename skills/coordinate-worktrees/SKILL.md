@@ -23,11 +23,13 @@ Treat an explicit request to dispatch work to other user-visible tasks as author
 
 ## Establish the coordination control plane
 
-For a delivery graph that needs multiple persistent worktree tasks, designate one project-level coordinator task as its control plane. When creating or selecting that control plane, prefer a task already associated with the corresponding saved project and title it `<project-name> 总协调`. Renaming an existing task improves discovery but does not attach a missing `projectId`; record the missing association instead of claiming an in-place binding. Use one coordinator per repository and delivery graph by default; use separate coordinators only for unrelated projects or genuinely independent release authority.
+A coordinator window is not a hidden Codex App thread type. It is the one task explicitly registered as the control plane for a delivery graph that needs multiple persistent worktree tasks. Record at least `coordinatorTitle`, exact `coordinatorThreadId`, `coordinatorHostId`, `coordinatorProjectId` (an explicit empty value is valid), `repository`, `deliveryGraph`, `finalBaseBranch`, `baseCheckout`, and `baseSyncOwner`.
+
+When creating or selecting that control plane, prefer a task already associated with the corresponding saved project and title it `<project-name> 总协调`. Renaming an existing task improves discovery but does not attach a missing `projectId`; it may continue as coordinator with an explicitly empty project ID, and listeners must notify its exact thread ID and host ID. Use one coordinator per repository and delivery graph by default; use separate coordinators only for unrelated projects or genuinely independent release authority.
 
 The coordinator does not perform business coding by default and must not patch a delegated task's worktree. It reads handoffs and current facts, partitions and dispatches work, maintains the lane ledger, waits and steers, independently validates results, decides a merge when authorized or requests authorization, performs authorized deployments, synchronizes the base, and retires lanes. Read-only checks, test reruns, diff review, merge, and deployment remain coordinator work. If the coordinator must code, explicitly transfer ownership first and record the reason and exact scope instead of silently taking work from a child task.
 
-Project association and searchable titles make tasks discoverable; branches, MRs or PRs, and the ledger remain the durable ownership record.
+Project association and searchable titles make tasks discoverable; branches, MRs or PRs, and the ledger remain the durable ownership record. When later messages arrive while work is active, follow [the coordinator message and commitment protocol](references/coordinator-control-plane.md).
 
 ## Choose worktree placement and ownership
 
@@ -41,12 +43,12 @@ Completion criterion: every persistent lane has an explicit placement owner, a d
 
 ## Resolve and maintain the final base
 
-- Define one `finalBaseBranch`, one `baseRemote`, and one absolute `baseCheckout` for the delivery graph. The base checkout is a clean coordination and synchronization surface, not an implementation lane.
+- Define one `finalBaseBranch`, one `baseRemote`, and one absolute `baseCheckout` for the delivery graph. At coordinator initialization, keep the registered base checkout on `finalBaseBranch` when safely possible. It is a clean coordination and synchronization surface, not an implementation lane.
 - Resolve `finalBaseBranch` in this order: an explicit user or repository instruction; the target of an existing umbrella MR or PR; the base remote's symbolic default branch. If these sources conflict or none is reliable, stop and ask instead of assuming `master`, `main`, `develop`, or another conventional name.
 - Record how the final base was resolved, its remote-tracking ref, the base checkout's branch and HEAD, and one coordinator as `baseSyncOwner`. Child lanes must not switch, update, or otherwise operate on the base checkout.
 - Before fixing a base SHA or dispatching a lane, fetch the base remote, verify the exact worktree mapping and clean status, and update the base checkout only when it is already on `finalBaseBranch` and its HEAD is an ancestor of `<baseRemote>/<finalBaseBranch>`. Use a fast-forward-only update and verify that both HEADs match afterward.
 - Serialize all base checkout synchronization through `baseSyncOwner`. Parallel implementation is allowed, but child merges and base synchronization remain ordered coordinator operations.
-- Classify synchronization as `base-sync-current`, `base-sync-pending`, or `base-sync-blocked`. Use `base-sync-blocked` when the default or final base is ambiguous, the checkout is missing, dirty, active elsewhere, on another branch, occupied inconsistently in another worktree, diverged, or cannot fast-forward.
+- Classify synchronization as `base-sync-current`, `base-sync-pending`, or `base-sync-blocked`. Use `base-sync-blocked` when the default or final base is ambiguous, the checkout is missing, dirty, active elsewhere, on another branch without satisfying the controlled-return checkpoint below, occupied inconsistently in another worktree, diverged, or cannot fast-forward.
 - A blocked synchronization is fail-closed: do not stash, discard, reset, force-switch, create a conflict-producing merge, rename a branch, or repurpose a checkout without explicit authorization. Preserve the observed state and report the exact blocker and safe next action.
 
 Completion criterion: the delivery graph has one dynamically resolved final base, a current or explicitly blocked base checkout, one synchronization owner, and a fixed base SHA obtained after the synchronization checkpoint.
@@ -107,6 +109,8 @@ Completion criterion: the task is visible in Codex App, attached to its own work
 - Wait at meaningful checkpoints: branch creation, first vertical slice, gate completion, MR creation, and requested-fix completion. Do not narrate unchanged snapshots or answer approval and user-input requests on behalf of the user.
 - Keep the user informed of lane state and review decisions, not raw internal chatter.
 
+Treat later user messages to the coordinator as additive unless they explicitly name a target and request a lifecycle change. New user input can end `wait_threads` or the current turn early; after handling it, rebuild the active lane and commitment ledger and resume unfinished acceptance, merge, deployment, base synchronization, and retirement checkpoints. Do not interrupt a child task merely to answer or investigate a new message; apply the linked coordinator message and commitment protocol for routing and recovery.
+
 For several or long-running App tasks, or when the user explicitly requests low-cost monitoring, the coordinator may add one optional read-only listener associated with the delivery graph's saved project and title it `<project-name> 任务监听器`. Keep a single short task on direct coordinator waits, and do not reuse a project listener across projects or default it to projectless. Before creating, reusing, or migrating a listener, read and follow [the project task-listener protocol and reusable prompt](references/task-listener.md); the coordinator remains the independent acceptance authority.
 
 Completion criterion: each active lane has one current owner and the ledger matches its actual branch, HEAD, and MR state.
@@ -132,20 +136,29 @@ Completion criterion: the coordinator has current test evidence, both review axe
 4. Run the full repository gates and required manual smoke tests on the integrated result.
 5. Review the umbrella MR against the authoritative spec and the final base. Merge it only when the user authorized the coordinator to decide; otherwise report readiness and wait.
 6. Immediately run the post-MR retirement checkpoint below after every merge. Retire a lane only after its work is merged or deliberately abandoned and all safety checks pass.
-7. After an MR or PR into `finalBaseBranch` is confirmed merged, run the post-integration base synchronization checkpoint below. A child merge into an integration branch must not update the final base checkout.
+7. Immediately after an MR or PR into `finalBaseBranch` is confirmed merged, run the post-integration base synchronization checkpoint below and report it. A child merge into an integration branch must not update the final base checkout.
 
 Completion criterion: the final branch contains only reviewed child work, full gates reflect the integrated tree, manual checks are honestly reported, no required MR or task remains unresolved, and the base checkout is current or explicitly blocked.
 
 ## Run a post-integration base synchronization checkpoint
 
-Run this checkpoint only after the final MR or PR target is `finalBaseBranch` and its merged state is refreshed from the remote. Run it again before the coordinator's final response:
+Run this checkpoint immediately after each MR or PR into `finalBaseBranch` is confirmed merged and its state is refreshed from the remote. Run it again before the coordinator's final response:
 
 1. Revalidate the configured remote default. If it no longer agrees with the recorded final base and no explicit instruction overrides it, mark `base-sync-blocked` and re-plan instead of silently switching branches.
-2. Refresh the exact `git worktree list --porcelain` mapping, the base checkout's current branch and HEAD, its owning task or process state when relevant, and `git status --porcelain`.
-3. Let only `baseSyncOwner` perform the synchronization. Do not run concurrent fetch, switch, merge, or branch operations against the base checkout from child lanes or other coordinators.
-4. Fetch `baseRemote`, confirm that the local base HEAD is an ancestor of `<baseRemote>/<finalBaseBranch>`, then fast-forward with `git -C <baseCheckout> merge --ff-only <baseRemote>/<finalBaseBranch>`.
-5. Verify that the base checkout HEAD exactly matches the refreshed remote-tracking ref. Otherwise mark `base-sync-blocked`; do not fall back to a normal merge, rebase, reset, or force operation.
-6. Always report a `Base checkout sync` section with the absolute path, remote, final base branch, local and remote HEADs, classification, whether an update occurred, and any blocker or next action.
+2. Fetch `baseRemote` and refresh `<baseRemote>/<finalBaseBranch>` before evaluating containment.
+3. Refresh the exact `git worktree list --porcelain` mapping, the registered base checkout's current branch and HEAD, its owning task or process state when relevant, and `git status --porcelain`.
+4. Let only `baseSyncOwner` perform the synchronization. Do not run concurrent fetch, switch, merge, or branch operations against the base checkout from child lanes or other coordinators.
+5. If the registered `baseCheckout` is already on `finalBaseBranch`, require it to be clean and confirm that its HEAD is an ancestor of the refreshed `<baseRemote>/<finalBaseBranch>`. Otherwise mark `base-sync-blocked` without modifying it.
+6. If the registered `baseCheckout` is on another branch, allow a controlled return to `finalBaseBranch` only when all of these are true:
+   - the exact checkout is clean;
+   - its current HEAD is an ancestor of the refreshed `<baseRemote>/<finalBaseBranch>`;
+   - the current branch and checkout are coordinator-owned;
+   - no active task or other worktree occupies the checkout or target branch;
+   - the remote default still agrees with the recorded final base.
+   If any condition fails, mark `base-sync-blocked` and preserve the checkout without stashing, resetting, or force-switching.
+7. When the applicable checks in step 5 or 6 pass, `baseSyncOwner` may switch only the registered `baseCheckout` to `finalBaseBranch` when needed. This is not authorization to switch an arbitrary user checkout. Fast-forward only with `git -C <baseCheckout> merge --ff-only <baseRemote>/<finalBaseBranch>`.
+8. Verify that the base checkout HEAD exactly matches the refreshed remote-tracking ref. Otherwise mark `base-sync-blocked`; do not fall back to a normal merge, rebase, reset, or force operation.
+9. Always report a `Base checkout sync` section with the absolute path, remote, final base branch, previous branch and HEAD, resulting branch and HEAD, classification, whether a controlled return or update occurred, and any blocker or next action.
 
 If the final MR or PR is ready but not merged because authorization is pending, report `base-sync-pending`; do not move the base checkout to an unmerged integration result.
 
