@@ -59,6 +59,15 @@ python3 "${CODEX_HOME:-$HOME/.codex}/skills/.system/skill-installer/scripts/inst
 
 新建 App 任务默认不置顶；只有用户明确要求时才置顶。协调关系依靠台账、task handle、分支和 PR/MR 维护，而不是依赖侧边栏顺序。
 
+## Worktree 目录与清理
+
+- 持久的 Codex App 任务使用 App 原生 worktree。物理目录由 App 管理，协调者不得手工删除。
+- collaboration subagent 共享协调任务的工作目录，不会也不应额外创建 worktree。
+- 手工 worktree 只作为明确的备用方案。统一放在 `${CODEX_HOME:-$HOME/.codex}/manual-worktrees/<repository>/<lane>` 这类专用根目录下，不要在主仓库父目录散落大量同名前缀目录。
+- 每个通道在开始前都要记录由 App 还是协调者管理，并声明合并后的退役策略。
+
+每个 PR/MR 合并或明确放弃后，协调者必须执行退役检查，并向用户输出 **Worktree 清理** 小节。小节要列出准确路径，并分类为：已退役、可清理、因脏状态保留、因任务活跃保留，或等待 App 生命周期处理。脏 worktree、未合并工作和仍有任务占用的目录只报告、不删除。
+
 ## 模型与推理强度
 
 先选择执行载体，再选择模型和推理强度。使用完整父任务历史的 collaboration subagent 会继承父任务当前设置；新建的 Codex App 任务是独立任务，除非用户明确指定覆盖值，否则使用配置默认值，不继承协调任务的临时设置。
@@ -73,6 +82,7 @@ python3 "${CODEX_HOME:-$HOME/.codex}/skills/.system/skill-installer/scripts/inst
 - 不要把 secret 或 credential 写入提示词、仓库文件、日志或评审描述。
 - 把分支和 PR/MR 作为持久的所有权记录；thread ID 仅作为运行时句柄。
 - push、merge、关闭任务及其他外部状态变更都需要明确授权。
+- 每次合并后都要报告仍然存在的 worktree，不能让清理责任悄然遗留。
 
 ## 许可证
 
