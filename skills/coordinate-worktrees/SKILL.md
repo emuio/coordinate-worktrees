@@ -1,6 +1,6 @@
 ---
 name: coordinate-worktrees
-description: Coordinate persistent Codex App tasks across isolated Git worktrees, parallel or stacked merge requests or pull requests, progress steering, review handbacks, coordinator-owned merge decisions, base checkout synchronization, and safe lane retirement. Use when delivery must remain user-visible, resumable, and independently reviewable, when deciding whether work belongs in a short-lived subagent or persistent worktree task, or when safely integrating and cleaning up completed worktrees and branches.
+description: Establish and operate a project-level coordination control plane for persistent Codex App tasks across isolated Git worktrees, parallel or stacked merge requests or pull requests, review handbacks, integration, base synchronization, and safe lane retirement. Use when delivery must remain user-visible, resumable, and independently reviewable, when deciding whether work belongs in a short-lived subagent or persistent worktree task, or when safely integrating and cleaning up completed worktrees and branches.
 ---
 
 # Coordinate Worktrees
@@ -20,6 +20,14 @@ Choose the execution surface before dispatching:
 Use a subagent only when shared filesystem access cannot create edit conflicts. Use a Codex App task when the result must remain visible, resumable, independently reviewable, or owned through an MR.
 
 Treat an explicit request to dispatch work to other user-visible tasks as authorization to create those App tasks. If that authorization is absent, ask before calling `codex_app__create_thread`.
+
+## Establish the coordination control plane
+
+For a delivery graph that needs multiple persistent worktree tasks, designate one project-level coordinator task as its control plane. When creating or selecting that control plane, prefer a task already associated with the corresponding saved project and title it `<project-name> 总协调`. Renaming an existing task improves discovery but does not attach a missing `projectId`; record the missing association instead of claiming an in-place binding. Use one coordinator per repository and delivery graph by default; use separate coordinators only for unrelated projects or genuinely independent release authority.
+
+The coordinator does not perform business coding by default and must not patch a delegated task's worktree. It reads handoffs and current facts, partitions and dispatches work, maintains the lane ledger, waits and steers, independently validates results, decides a merge when authorized or requests authorization, performs authorized deployments, synchronizes the base, and retires lanes. Read-only checks, test reruns, diff review, merge, and deployment remain coordinator work. If the coordinator must code, explicitly transfer ownership first and record the reason and exact scope instead of silently taking work from a child task.
+
+Project association and searchable titles make tasks discoverable; branches, MRs or PRs, and the ledger remain the durable ownership record.
 
 ## Choose worktree placement and ownership
 
@@ -99,7 +107,7 @@ Completion criterion: the task is visible in Codex App, attached to its own work
 - Wait at meaningful checkpoints: branch creation, first vertical slice, gate completion, MR creation, and requested-fix completion. Do not narrate unchanged snapshots or answer approval and user-input requests on behalf of the user.
 - Keep the user informed of lane state and review decisions, not raw internal chatter.
 
-For several or long-running App tasks, or when the user explicitly requests low-cost monitoring, the coordinator may create or reuse a projectless, independent, read-only App task as an optional listener. Do not require one for a single short task. Before dispatching or reusing a listener, read and follow [the task-listener protocol and reusable prompt](references/task-listener.md); record its observer handle, settings source, and targets in the coordinator ledger while keeping acceptance and delivery authority with the coordinator.
+For several or long-running App tasks, or when the user explicitly requests low-cost monitoring, the coordinator may add one optional read-only listener associated with the delivery graph's saved project and title it `<project-name> 任务监听器`. Keep a single short task on direct coordinator waits, and do not reuse a project listener across projects or default it to projectless. Before creating, reusing, or migrating a listener, read and follow [the project task-listener protocol and reusable prompt](references/task-listener.md); the coordinator remains the independent acceptance authority.
 
 Completion criterion: each active lane has one current owner and the ledger matches its actual branch, HEAD, and MR state.
 
