@@ -99,6 +99,8 @@ Completion criterion: the task is visible in Codex App, attached to its own work
 - Wait at meaningful checkpoints: branch creation, first vertical slice, gate completion, MR creation, and requested-fix completion. Do not narrate unchanged snapshots or answer approval and user-input requests on behalf of the user.
 - Keep the user informed of lane state and review decisions, not raw internal chatter.
 
+For several or long-running App tasks, or when the user explicitly requests low-cost monitoring, the coordinator may create or reuse a projectless, independent, read-only App task as an optional listener. Do not require one for a single short task. Before dispatching or reusing a listener, read and follow [the task-listener protocol and reusable prompt](references/task-listener.md); record its observer handle, settings source, and targets in the coordinator ledger while keeping acceptance and delivery authority with the coordinator.
+
 Completion criterion: each active lane has one current owner and the ledger matches its actual branch, HEAD, and MR state.
 
 ## Review each child MR
