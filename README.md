@@ -59,6 +59,15 @@ The coordinator owns the delivery graph, integration state, review decisions, an
 
 New App tasks remain unpinned by default. Pin a task only when the user explicitly requests it; coordination relies on the ledger, task handle, branch, and PR or MR rather than sidebar order.
 
+## Worktree placement and cleanup
+
+- Persistent Codex App tasks use the App's native worktree. The physical directory is App-managed and must not be removed manually by the coordinator.
+- Collaboration subagents share the coordinator checkout and do not create extra worktrees.
+- Manual worktrees are an explicit fallback only. Keep them below a dedicated root such as `${CODEX_HOME:-$HOME/.codex}/manual-worktrees/<repository>/<lane>`, not as many sibling directories beside the primary repository.
+- Every lane records whether it is App-managed or coordinator-managed and declares a retirement policy before work begins.
+
+After every merged or abandoned PR/MR, the coordinator runs a retirement checkpoint and reports a **Worktree cleanup** section with exact paths classified as retired, cleanup-ready, retained-dirty, retained-active, or App-lifecycle-pending. Dirty, unmerged, or actively owned worktrees are retained and reported instead of being removed.
+
 ## Model and reasoning settings
 
 Choose the execution surface before choosing model or reasoning settings. A full-history collaboration subagent inherits the parent task's current settings. A newly created Codex App task is independent and uses configured defaults unless the user explicitly pins overrides; it does not inherit the coordinator task's transient settings.
@@ -73,6 +82,7 @@ For progress tracking, prefer compact `wait_threads` snapshots. Use `read_thread
 - Keep secrets and credentials out of prompts, repository files, logs, and review descriptions.
 - Treat branches and PRs or MRs as durable ownership records; thread IDs are runtime handles only.
 - Require explicit authorization for pushes, merges, closures, and other external state changes.
+- Report remaining worktrees after every merge; never make cleanup invisible.
 
 ## License
 

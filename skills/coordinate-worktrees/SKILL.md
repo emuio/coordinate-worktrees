@@ -21,6 +21,16 @@ Use a subagent only when shared filesystem access cannot create edit conflicts. 
 
 Treat an explicit request to dispatch work to other user-visible tasks as authorization to create those App tasks. If that authorization is absent, ask before calling `codex_app__create_thread`.
 
+## Choose worktree placement and ownership
+
+- Prefer a Codex App task's native worktree for persistent, user-visible implementation. Its physical path is App-managed (commonly below `~/.codex/worktrees/`, but do not depend on that layout), and the coordinator must not manually remove it.
+- Collaboration subagents share the coordinator's filesystem. They do not create an isolated worktree and must not run manual `git worktree add` commands.
+- Use a manual worktree only as an explicit fallback when native App worktree tooling is unavailable or the user requests a coordinator-owned manual lane. Put it under one dedicated root outside the repository's parent directory, such as `${CODEX_HOME:-$HOME/.codex}/manual-worktrees/<repository>/<lane>`.
+- Do not scatter manual worktrees beside the primary checkout (for example, many sibling `project-*` directories), and do not place coordinator-owned manual worktrees inside the App-managed worktree root.
+- Record `placementOwner` (`codex-app` or `coordinator-manual`), absolute path, and `retirementPolicy` in the lane ledger. Use one of: `report-only` (safe default), `retire-clean-manual-after-merge`, or `archive-app-task-after-merge`.
+
+Completion criterion: every persistent lane has an explicit placement owner, a deterministic path policy, and a declared retirement policy before implementation begins.
+
 ## Choose model and reasoning settings
 
 Choose the execution surface first; model and reasoning settings are a secondary decision. Do not present automatic difficulty-based model routing as a Codex default.
@@ -38,7 +48,7 @@ Record the model, reasoning effort, and their source when known: inherited, conf
 2. Identify the real repository root, current dirty state, remote, base branch, and fixed base SHA. Preserve unrelated user changes.
 3. Partition work by dependency and file ownership. Put overlapping files in one lane or define a merge order; do not rely on agents to reconcile concurrent shared edits.
 4. Create or select an integration branch. For a multi-MR delivery, open a Draft umbrella MR from integration to the final base before implementation begins.
-5. Record a ledger for every lane: scope, dependencies, execution surface, model and reasoning source when known, App thread ID, worktree, branch, base SHA, MR target, MR URL, HEAD, tests, and status.
+5. Record a ledger for every lane: scope, dependencies, execution surface, model and reasoning source when known, App thread ID, worktree, placement owner, retirement policy, branch, base SHA, MR target, MR URL, HEAD, tests, and status.
 
 Creating a remote repository or changing repository visibility is external state. Do it only when the user already authorized that outcome or after confirmation.
 
@@ -99,9 +109,28 @@ Completion criterion: the coordinator has current test evidence, both review axe
 3. Create dependent integration tasks only from the updated integration branch, never from the original base.
 4. Run the full repository gates and required manual smoke tests on the integrated result.
 5. Review the umbrella MR against the authoritative spec and the final base. Merge it only when the user authorized the coordinator to decide; otherwise report readiness and wait.
-6. Retire completed lanes only after their work is merged or deliberately abandoned, following the safety checks below.
+6. Immediately run the post-MR retirement checkpoint below after every merge. Retire a lane only after its work is merged or deliberately abandoned and all safety checks pass.
 
 Completion criterion: the final branch contains only reviewed child work, full gates reflect the integrated tree, manual checks are honestly reported, and no required MR or task remains unresolved.
+
+## Run a post-MR retirement checkpoint
+
+Run this checkpoint after every merged or deliberately abandoned lane and again before the coordinator's final response:
+
+1. Refresh the MR state and target containment; do not rely on a worker's earlier completion report.
+2. Refresh the owning task state and the exact `git worktree list --porcelain` mapping.
+3. Refresh `git status --porcelain` in the exact worktree and compare branch and HEAD with the ledger.
+4. Classify the lane as exactly one of:
+   - `retired`: authorized cleanup completed and the ledger was updated;
+   - `cleanup-ready`: all safety checks pass, but cleanup still needs authorization or execution;
+   - `retained-dirty`: uncommitted or untracked work is present;
+   - `retained-active`: an owning task or another workflow still uses the lane;
+   - `app-lifecycle-pending`: the App task is archived or complete, but its App-managed physical worktree remains under App ownership.
+5. Always report a `Worktree cleanup` section to the user. Include each affected absolute path, classification, whether its branch was retained or removed, whether recovery refs or stashes exist, and the next action. Report the section even when no path was deleted.
+
+Never silently leave completed manual lanes scattered on disk. Never silently delete them either: the checkpoint makes both the cleanup decision and any remaining responsibility visible.
+
+Completion criterion: after every merge, the user can see which exact worktrees were removed, which remain, why they remain, and how any abandoned changes can be recovered.
 
 ## Retire completed lanes safely
 
@@ -116,7 +145,7 @@ Completion criterion: the final branch contains only reviewed child work, full g
 4. For an App-managed worktree, archive the task after verification when retirement is authorized. Do not change its pin state unless the user explicitly requests it. Do not assume archiving removes the physical worktree, and do not manually remove a worktree still owned by Codex App. Use an App-provided lifecycle or handoff operation when available; otherwise leave physical cleanup to the App and record that state.
 5. For a coordinator-owned manual worktree, remove only the verified absolute path with `git worktree remove <absolute-worktree-path>`, then run `git worktree prune`. Never use a glob, unresolved variable, broad parent directory, `rm -rf`, or `git worktree remove --force` as the default cleanup path.
 6. Delete a local lane branch only after its merged state is verified. Delete a remote branch only when repository policy or explicit user authorization permits it. Retire an integration branch only after the umbrella MR is merged and no open child MR still targets it.
-7. Mark the ledger entry `retired` and record the merge or preservation ref, task archive state, worktree disposition, branch disposition, and cleanup timestamp.
+7. Mark the ledger entry with the post-MR classification. When retired, record the merge or preservation ref, task archive state, worktree disposition, branch disposition, and cleanup timestamp.
 
 Completion criterion: all retired work remains recoverable from the merged target or recorded remote ref, no dirty or actively owned worktree was removed, and the ledger matches the remaining App tasks, worktrees, and branches.
 
