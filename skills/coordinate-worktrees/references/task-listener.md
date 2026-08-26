@@ -1,14 +1,36 @@
 # Project Task Listener
 
-Use one optional listener per project when several App tasks or long-running tasks make direct coordination noisy, or when the user explicitly asks for low-cost monitoring. A single short task should normally stay on direct coordinator `wait_threads` calls.
+Every persistent App task starts with `notificationOwner=target-self`. Use one optional listener per project only when several parallel tasks, a long-running task, materially noisy direct coordination, or an explicit request for low-cost or independent event observation justifies it. An ordinary single task self-notifies and does not need a listener or a listener capability probe merely for notification routing.
 
-## Create and classify the listener
+## Use the default target-self route
 
+Record the coordinator notification address in every target brief. The target owns completion and `needs_attention` notification unless the coordinator later completes the listener ownership switch below.
+
+```text
+Notification routing for this observation cycle:
+- notificationOwner: target-self
+- task name: <TASK_NAME>
+- task threadId: <TARGET_THREAD_ID>
+- task hostId: <TARGET_HOST_ID>
+- coordinator title: <COORDINATOR_TITLE>
+- coordinator threadId: <COORDINATOR_THREAD_ID>
+- coordinator hostId: <COORDINATOR_HOST_ID>
+
+Use send_message_to_thread with the exact coordinator threadId and hostId above when this task completes or needs attention. For completion, send the task name, task threadId, task hostId, `completed`, and final summary. For `needs_attention`, send the task name, task threadId, task hostId, `needs_attention`, and the requested decision. Do not send routine progress chatter.
+
+Each state gets one logical notification. A failed or timed-out send is not delivery; retry at most once. If the retry also fails or times out, record the notification as undelivered in this task and do not claim delivery.
+
+Obey a later explicit coordinator message that changes notificationOwner for this cycle. When it changes to listener, stop normal self-notification until the coordinator explicitly switches it back to target-self. Notification routing does not expand implementation scope or transfer acceptance, merge, deployment, base synchronization, or worktree retirement authority.
+```
+
+## Create and classify an optional listener
+
+- Enter this flow only for one of the listener-use cases above. Keep `notificationOwner=target-self` throughout project resolution, probing, listener creation, and initial registration.
 - Resolve the saved project for the delivery graph from the current invocation entry point. Record the exact project path, `projectKind`, and `hostId` returned by that call, plus the invocation entry point and observation time. A matching path or project name does not prove that another entry point will select the same host.
-- If the user requested event-driven monitoring, explain the observed host's monitoring implications before creating the target. Prefer a currently returned local project route for future target and listener creation when it is available and the user has not explicitly chosen remote or mobile execution. This preference does not migrate the existing coordinator or any existing target to another host. Do not override an explicit remote or mobile choice.
+- Explain the observed host's monitoring implications before creating the listener. Prefer a currently returned local project route for future target and listener creation when it is available and the user has not explicitly chosen remote or mobile execution. This preference does not migrate the existing coordinator or any existing target to another host. Do not override an explicit remote or mobile choice.
 - After target creation and before announcing a listener as active, make one capability probe with `wait_threads`, the target's actual `threadId` and `hostId`, and `timeoutMs: 0`. A supported nonterminal snapshot or timeout means the handler route is available; it does not mean the target completed. Do not classify a route from `projectKind` or `hostId` alone.
-- When the probe succeeds, create or reuse the listener under the selected project route and title it `<project-name> 任务监听器`; the coordinator task itself may remain unassociated when it predates project-scoped coordination. For a Git saved project, call `create_thread` with the non-worktree `environment: {type: "local"}` as the project classification surface. Here `environment.type: local` selects the listener's non-worktree execution mode; it does not mean `projectKind=local`, force `hostId=local`, or replace the selected project/host route. The listener remains strictly read-only even when its working directory exposes the repository.
-- When the probe reports `No handler registered for tool: codex_app.wait_threads` or an equivalent unsupported target-host route, set `listenerLifecycle` to `listener-unsupported-target-host`. Do not create or recreate a listener for that target, use fixed polling, repeatedly call `read_thread`, or claim monitoring is active. Instead, append the direct self-notification fallback below to the target once and record the degraded route.
+- When the probe succeeds, create or reuse the listener under the selected project route and title it `<project-name> 任务监听器`; the coordinator task itself may remain unassociated when it predates project-scoped coordination. For a Git saved project, call `create_thread` with the non-worktree `environment: {type: "local"}` as the project classification surface. Here `environment.type: local` selects the listener's non-worktree execution mode; it does not mean `projectKind=local`, force `hostId=local`, or replace the selected project/host route. The listener remains strictly read-only even when its working directory exposes the repository. Register the target as standby, confirm `active-wait`, and only then use the ownership-switch protocol below.
+- When the probe reports `No handler registered for tool: codex_app.wait_threads` or an equivalent unsupported target-host route, record `listenerProbeDisposition: unsupported-target-host`, keep or choose `notificationOwner=target-self`, and ensure the target has the default prompt above. Do not create or recreate a listener for that target, use fixed polling, repeatedly call `read_thread`, or claim monitoring is active.
 - Give it a self-contained observer brief. It is independent and does not inherit the coordinator's repository or business context.
 - Monitor only tasks from that project. Keep at most eight active targets in one project listener; leave overflow with the coordinator or an explicitly separate project-scoped listener rather than mixing projects.
 - Use projectless only when no saved project exists, or for temporary cross-project observation after the user explicitly accepts mixed classification. Never make that fallback a project's default or silently reuse it across projects.
@@ -30,9 +52,26 @@ The listener may only wait for or read task state and send one logical completio
 
 The coordinator retains handoff reading, partitioning, dispatch, ledger maintenance, steering, independent acceptance, test reruns, diff review, merge decisions or authorization requests, deployment, base synchronization, and worktree retirement. A listener report is a routing signal, not acceptance evidence.
 
+## Transfer notification ownership
+
+Treat notification ownership as one explicit state per target observation cycle. The target and listener must never both be normal notification owners.
+
+1. Keep `notificationOwner=target-self` while the listener is absent, probing, creating, registering, or waiting only in standby. A standby listener may prove its state and maintain a cursor but must not send a normal completion or attention notification.
+2. After the listener confirms `active-wait` for the exact target and cursor, the coordinator may make one explicit transition to `notificationOwner=listener`. Record the transition and send the new owner state to both target and listener; the target then suppresses its normal self-notification for that cycle.
+3. If the listener stops waiting, loses the target, fails to rearm, or cannot be reached on a newly probed route, make one explicit transition back to `notificationOwner=target-self`. Send the target the exact coordinator notification address before sending any review fix or other follow-up. Tell a reachable listener to drop or suppress that target, and record any transport race for deduplication; do not leave both parties authorized.
+
+Registration, listener creation, or a capability probe alone never transfers ownership. Do not describe a listener as active unless its task state confirms `active-wait`.
+
 ## Maintain the observer ledger
 
-Record the listener outside the Git lane list with:
+For every persistent target, record:
+
+- `notificationOwner`, exactly `target-self` or `listener`;
+- coordinator notification address: exact `coordinatorThreadId` and `coordinatorHostId`;
+- the last notification disposition: `delivered`, `retried-delivered`, `undelivered`, or `not-attempted`, with the relevant state;
+- `listenerLifecycle`, active or terminal cursor, and listener notification disposition only when a listener exists for that cycle. A failed pre-creation probe is recorded as a probe disposition, not as a listener lifecycle.
+
+When a listener exists, record it outside the Git lane list with:
 
 - `coordinatorTitle`, exact `coordinatorThreadId`, `coordinatorHostId`, and `coordinatorProjectId` (including an explicit empty value);
 - project-resolution snapshot: project path, `projectKind`, `hostId`, invocation entry point, and observation time;
@@ -41,28 +80,28 @@ Record the listener outside the Git lane list with:
 - `listenerThreadId`, `listenerProjectId`, its `hostId`, effective `model` and `reasoning`, plus `modelSource` and `reasoningSource`, when a listener exists;
 - active targets as task name, `threadId`, `hostId`, and latest cursor;
 - each completed observation cycle's task name, `threadId`, `hostId`, terminal cursor, and notification disposition, kept outside the active target set so the coordinator can start a later cycle without replaying the old terminal event;
-- `listenerLifecycle`, such as `creating`, `active-wait`, `listener-unsupported-target-host`, `migration-pending`, `superseded-retained`, or `archived`;
-- for a degraded route, `notificationFallback: direct-self-notification`, the fallback message attempt, and whether its terminal or attention notification was delivered, retried once, or remains undelivered.
+- `listenerLifecycle`, such as `creating`, `standby`, `active-wait`, `inactive`, `migration-pending`, `superseded-retained`, or `archived`;
+- each ownership transition and any delivery race or deduplication disposition.
 
 ## Follow the event-driven protocol
 
-1. Give the listener the coordinator task's title, exact `threadId` and `hostId`, and its `projectId` when present; record the project ID as empty when the existing coordinator is unassociated. The exact thread and host are the notification address—never infer the destination from title or project association. Add each initial target's task name, `threadId`, `hostId`, and latest cursor when one exists.
-2. Maintain an active target set and cursor per target. Treat later target messages as additive: add same-project targets without discarding active ones. Remove, pause, or replace a nonterminal target only when the message explicitly names it and requests that lifecycle change. Do not add a ninth active target or a target from another project.
+1. Give the listener the coordinator task's title, exact `threadId` and `hostId`, and its `projectId` when present; record the project ID as empty when the existing coordinator is unassociated. The exact thread and host are the notification address—never infer the destination from title or project association. Add each initial target's task name, `threadId`, `hostId`, latest cursor when one exists, and current `notificationOwner`.
+2. Maintain an active target set, cursor, and ownership state per target. Treat later target messages as additive: add same-project targets without discarding active ones. Remove, pause, or replace a nonterminal target only when a message explicitly names it and requests that lifecycle change. Do not add a ninth active target or a target from another project.
 3. Call `wait_threads` with the active targets and their latest cursors. A new message may end the current wait early; after handling it, rebuild the active target and cursor map and resume the event wait. Do not emit fixed-period heartbeats, repeatedly call `read_thread`, or narrate unchanged state. Use `read_thread` only if the wait result lacks the final summary needed for the permitted notification.
-4. On completion, send the coordinator only the task name, `threadId`, `hostId`, terminal status, terminal cursor, and final summary. On a blocker or request for input, send only a minimal attention notice with the task name, `threadId`, status, and requested decision. Never send progress chatter or perform acceptance.
+4. Only for a target whose current `notificationOwner=listener`, on completion send the coordinator the task name, `threadId`, `hostId`, terminal status, terminal cursor, and final summary. On a blocker or request for input, send only a minimal attention notice with the task name, `threadId`, status, and requested decision. For a standby `target-self` target, update its cursor and state without sending the normal notification. Never send progress chatter or perform acceptance.
 5. Each completion or attention notice is one logical notification. A failed or timed-out `send_message_to_thread` call does not prove delivery; retry at most once as transport recovery. If the retry also fails or times out, state clearly in the listener task that the notification was not delivered and never record it as delivered.
-6. After a terminal status, complete the notification attempt and remove that target. Continue waiting for the remaining active targets. When none remain, stay available for later same-project targets without inventing a heartbeat schedule.
+6. After a terminal status, complete the owner-appropriate disposition and remove that target. Continue waiting for the remaining active targets. When none remain, stay available for later same-project targets without inventing a heartbeat schedule.
 
 ## Rearm a completed target for review follow-up
 
-A terminal notification and removal close one observation cycle; they do not make that task permanently ineligible. Sending a review fix or follow-up to the same completed task starts a new observation cycle, but does not reactivate the listener by itself.
+A terminal notification and removal close one observation cycle; they do not make that task permanently ineligible. Apply listener rearm only when `notificationOwner=listener` and the listener lifecycle is currently `active-wait`. With `notificationOwner=target-self`, send the follow-up directly to the original task with the default target-self routing fields and do not rearm a listener.
 
 1. When a cycle reaches terminal, the coordinator records the notification's terminal cursor with the target's existing `threadId` and `hostId`. Keep that completed cycle outside the listener's active target set.
 2. Before sending the review fix or follow-up, the coordinator re-registers the target with the same `threadId`, the same `hostId`, and the previous terminal cursor. The listener treats this explicit registration as a new cycle, waits from that cursor, and confirms it has entered `active-wait`; only then may the coordinator send the target message.
 3. If the coordinator already sent the target message, it must immediately call `wait_threads` directly for that exact `threadId` and `hostId`, starting from the previous terminal cursor. Do not assume the listener recovered automatically. If the recovered event is terminal, handle it directly and leave the target inactive. If the target remains nonterminal, record the latest returned cursor, re-register the listener from that cursor, and confirm `active-wait` before returning observation ownership to it.
 4. On the new cycle's terminal event, make one logical notification with the new terminal cursor and remove the target again. Cursor continuity must suppress the prior terminal event and duplicate notification.
 
-Never keep historical terminal targets permanently active, infer a new cycle from target activity, poll for one, or expand the listener's read-only boundary. Only an explicit coordinator registration starts another listener cycle.
+If listener rearm or direct recovery fails, times out without proving `active-wait`, or reports an unsupported route, first switch `notificationOwner` back to `target-self`; then send the follow-up with the coordinator's exact notification address. Never keep historical terminal targets permanently active, infer a new cycle from target activity, poll for one, or expand the listener's read-only boundary. Only an explicit coordinator registration starts another listener cycle.
 
 ## Migrate a projectless listener
 
@@ -78,7 +117,7 @@ Likewise, returning to the desktop or another invocation entry point only affect
 
 ## Reusable project listener prompt
 
-Create the task under the currently selected and capability-proven `<PROJECT_ID>` route with the non-worktree `environment: {type: "local"}` and title it `<PROJECT_NAME> 任务监听器`. This `local` value is the `create_thread` environment type, not the project's `projectKind` or `hostId`; it does not force the selected host route to local. Replace the placeholders and add targets using the same four-field shape.
+Use this prompt only after a listener-use case applies and the one-shot target-host probe succeeds. Create the task under the currently selected and capability-proven `<PROJECT_ID>` route with the non-worktree `environment: {type: "local"}` and title it `<PROJECT_NAME> 任务监听器`. This `local` value is the `create_thread` environment type, not the project's `projectKind` or `hostId`; it does not force the selected host route to local. Replace the placeholders and add targets using the same five-field shape.
 
 ```text
 You are an independent, project-associated, strictly read-only Codex App task listener. Project association is only for discoverability; you are not a Git delivery lane and do not inherit the coordinator's repository or business context.
@@ -106,21 +145,24 @@ Listener settings and provenance:
 - reasoning: <EFFECTIVE_REASONING>
 - reasoning source: <CONFIGURED_DEFAULT_OR_EXPLICIT_USER_CHOICE>
 
-Initial active targets:
+Initial observed targets:
 - task name: <TASK_NAME>
   threadId: <TARGET_THREAD_ID>
   hostId: <TARGET_HOST_ID>
   cursor: <LATEST_CURSOR_OR_NONE>
+  notificationOwner: target-self
 
-Observe only with event-driven wait_threads calls. Keep the latest cursor per target, pass cursors into later waits, and keep at most eight active targets. Do not use a fixed-period heartbeat or repeatedly call read_thread. A wait timeout is not completion; re-enter the event wait with current cursors and do not narrate unchanged state.
+Observe only with event-driven wait_threads calls. Keep the latest cursor and notificationOwner per target, pass cursors into later waits, and keep at most eight active targets. Do not use a fixed-period heartbeat or repeatedly call read_thread. A wait timeout is not completion; re-enter the event wait with current cursors and do not narrate unchanged state.
 
-Later messages are additive by default. Append targets from this same project without dropping active targets; reject cross-project targets and do not add a ninth active target. Remove, pause, or replace a nonterminal target only when a message explicitly names it and requests that lifecycle change. A new message may end the current wait early, so rebuild the active target and cursor map after handling it and resume waiting. After a terminal status, complete the notification attempt, remove that target, and continue observing the rest.
+Newly registered targets remain standby with notificationOwner=target-self. Confirm active-wait for the exact target and cursor, but do not send its normal completion or attention notification until the coordinator explicitly changes notificationOwner to listener. Registration or active-wait alone does not transfer ownership. After that explicit change, the target is no longer the normal notifier for the cycle. If the coordinator switches ownership back to target-self, suppress listener notifications and drop or retain the target only as explicitly instructed.
 
-A terminal removal closes one observation cycle, not the task forever. If the coordinator explicitly re-registers that completed task for a review fix or follow-up, add it as a new cycle with the same threadId, same hostId, and supplied previous terminal cursor; enter active-wait from that cursor and make the listener state confirmable as `active-wait`. Do not replay the old terminal event, infer reactivation from new target activity, or reactivate without the coordinator's explicit registration. If the target follow-up was already sent, do not assume observation resumed; only accept a nonterminal re-registration from the latest cursor the coordinator recovered with a direct wait.
+Later messages are additive by default. Append targets from this same project without dropping active targets; reject cross-project targets and do not add a ninth active target. Remove, pause, or replace a nonterminal target only when a message explicitly names it and requests that lifecycle change. A new message may end the current wait early, so rebuild the active target, cursor, and ownership map after handling it and resume waiting. After a terminal status, complete the owner-appropriate disposition, remove that target, and continue observing the rest.
+
+A terminal removal closes one observation cycle, not the task forever. Only when notificationOwner=listener and this listener remains active-wait, an explicit coordinator re-registration may start a review-fix cycle with the same threadId, same hostId, and supplied previous terminal cursor. Enter active-wait from that cursor before accepting notification ownership for the new cycle. Do not replay the old terminal event, infer reactivation from new target activity, or reactivate without the coordinator's explicit registration. If the target follow-up was already sent, do not assume observation resumed; only accept a nonterminal re-registration from the latest cursor the coordinator recovered with a direct wait.
 
 You may only wait for or read task state and notify the coordinator. Do not read the repository, edit code, run tests, inspect or operate on Git or an MR or PR, deploy, perform acceptance, merge, synchronize a base checkout, retire a worktree, message implementation tasks, or answer blockers or input requests on the user's behalf.
 
-When a target completes, use send_message_to_thread to send the coordinator only:
+When a target whose current notificationOwner=listener completes, use send_message_to_thread to send the coordinator only:
 - task name
 - threadId
 - hostId
@@ -128,24 +170,7 @@ When a target completes, use send_message_to_thread to send the coordinator only
 - terminal cursor
 - final summary
 
-When a target is blocked or requests input, send only a minimal attention notice with task name, threadId, status, and requested decision. Each event gets one logical notification. A send failure or timeout is not delivery; retry at most once, then clearly report undelivered status in this listener task and do not claim otherwise.
+When a listener-owned target is blocked or requests input, send only a minimal attention notice with task name, threadId, status, and requested decision. Do not send the normal notice for a target-self standby target. Each event gets one logical notification. A send failure or timeout is not delivery; retry at most once, then clearly report undelivered status in this listener task and do not claim otherwise.
 
 Model and reasoning are independent: low reasoning does not select a lower-cost model. Apply only settings authorized under the coordinator's model-choice rule. A later authorized change affects subsequent listener turns, not the implementation tasks being observed. The coordinator independently validates all results and retains review, merge, deployment, base synchronization, and worktree retirement authority.
-```
-
-## Reusable direct self-notification fallback
-
-Use this only after the one-shot capability probe classifies the target as `listener-unsupported-target-host`. Send it once to the existing target; do not create a replacement target or listener. This fallback routes the target's own terminal or attention state and is not event-driven observation.
-
-```text
-The coordinator could not register event-driven wait_threads monitoring for this task's current host. Do not change execution host, create a listener, poll another task, or claim that monitoring is active.
-
-Notify only this coordinator when your own task reaches a terminal state or needs attention:
-- coordinator title: <COORDINATOR_TITLE>
-- coordinator threadId: <COORDINATOR_THREAD_ID>
-- coordinator hostId: <COORDINATOR_HOST_ID>
-
-For completion, send only your task name, threadId, `completed`, and final summary. For a blocker or input request, send only your task name, threadId, `blocked` or `needs_attention`, and the requested decision. Each state gets one logical notification. If `send_message_to_thread` fails or times out, retry at most once; if that retry also fails, report the notification as undelivered in your own task and do not claim delivery.
-
-This routing permission does not authorize you to inspect or accept other tasks, perform independent acceptance, merge, deploy, synchronize a base checkout, retire worktrees, or expand your assigned scope. The coordinator retains all acceptance and lifecycle authority.
 ```

@@ -70,7 +70,7 @@ Record the model, reasoning effort, and their source when known: inherited, conf
 2. Identify the real repository root, current dirty state, remote, dynamically resolved final base branch, base checkout, and fixed base SHA. Run the base synchronization checkpoint before fixing that SHA. Preserve unrelated user changes.
 3. Partition work by dependency and file ownership. Put overlapping files in one lane or define a merge order; do not rely on agents to reconcile concurrent shared edits.
 4. Create or select an integration branch. For a multi-MR delivery, open a Draft umbrella MR from integration to the final base before implementation begins.
-5. Record the delivery-level final base, resolution source, base checkout, base synchronization owner and status. Record for every lane: scope, dependencies, execution surface, model and reasoning source when known, App thread ID, worktree, placement owner, retirement policy, branch, base SHA, MR target, MR URL, HEAD, tests, and status.
+5. Record the delivery-level final base, resolution source, base checkout, base synchronization owner and status. Record for every lane: scope, dependencies, execution surface, model and reasoning source when known, App thread ID, worktree, placement owner, retirement policy, branch, base SHA, MR target, MR URL, HEAD, tests, status, `notificationOwner`, the coordinator's exact notification `threadId` and `hostId`, and the last notification disposition. Record listener lifecycle and cursor fields only when a listener exists.
 
 Creating a remote repository or changing repository visibility is external state. Do it only when the user already authorized that outcome or after confirmation.
 
@@ -93,17 +93,21 @@ Completion criterion: every implementation unit has one owner, an explicit base,
    - commit identity and message rules from the repository;
    - requirement to commit, verify, push, and open a Draft MR;
    - prohibition on self-merging; the coordinator owns review and merge;
+   - `notificationOwner=target-self` by default and the coordinator's exact notification `threadId` and `hostId`;
+   - requirement to self-notify that exact address on completion or `needs_attention`, retry a failed or timed-out send at most once, and never claim an unsuccessful delivery;
    - required final report: worktree, branch, HEAD, MR URL, tests, and blockers.
 6. Codex App worktrees can begin at detached HEAD. Require the lane to create and verify its named branch before its first edit or commit.
-7. If event-driven monitoring was requested, after target creation and before declaring monitoring active, make one `wait_threads` capability probe for that target with `timeoutMs: 0`. A supported nonterminal or timeout result proves the handler route without implying completion. If the probe reports no registered handler or an equivalent unsupported target-host route, follow the listener protocol's `listener-unsupported-target-host` fallback; do not create another listener, poll, or claim monitoring is active. Base this decision on the current returned route and probe, not a permanent assumption about mobile, remote, or any named host.
+7. Keep `target-self` for an ordinary single task. Consider a listener only for several parallel targets, a long-running target, materially noisy direct coordination, or an explicit request for low-cost or independent event observation. Before creating or reusing one, make one `wait_threads` capability probe against the target's actual `threadId` and `hostId` with `timeoutMs: 0`. A supported nonterminal or timeout result proves only that route. If the probe reports no registered handler or an equivalent unsupported route, keep `target-self`; do not create or recreate a listener, poll, or claim monitoring is active. Probe each new target's actual host instead of permanently classifying mobile, remote, slingshot, or any named host.
+
+Use the default target-self prompt and, only when justified, the listener ownership-switch protocol in [the project task-listener reference](references/task-listener.md). Exactly one `notificationOwner` is responsible in an observation cycle. Transfer ownership to `listener` only after it confirms `active-wait`; if it later fails or cannot reattach, explicitly switch back to `target-self` and resend the exact coordinator notification address.
 
 If native App thread/worktree tools are unavailable, report that boundary. Do not silently replace a requested persistent lane with a hidden subagent or an unmanaged manual worktree.
 
-Completion criterion: the task is visible in Codex App, attached to its own worktree and named branch, and its brief names both the MR target and the no-self-merge rule.
+Completion criterion: the task is visible in Codex App, attached to its own worktree and named branch, and its brief names the MR target, no-self-merge rule, notification owner, and exact coordinator notification address.
 
 ## Coordinate without taking ownership away
 
-- Follow progress with bounded `wait_threads` calls. Use one call for one to eight targets, pass each target's latest cursor, and use `timeoutMs: 0` for an immediate compact snapshot.
+- Where the target host supports it, follow progress with bounded `wait_threads` calls. Use one call for one to eight targets, pass each target's latest cursor, and use `timeoutMs: 0` for an immediate compact snapshot. Do not turn an unsupported route into polling.
 - Use `read_thread` only when the full transcript or diagnostic detail is required; use `list_threads` only to relocate a handle.
 - Send corrections with `codex_app__send_message_to_thread` when scope, branch, test evidence, or ownership drifts.
 - Send baseline failures to every affected lane so workers separate pre-existing failures from regressions.
@@ -113,9 +117,9 @@ Completion criterion: the task is visible in Codex App, attached to its own work
 
 Treat later user messages to the coordinator as additive unless they explicitly name a target and request a lifecycle change. New user input can end `wait_threads` or the current turn early; after handling it, rebuild the active lane and commitment ledger and resume unfinished acceptance, merge, deployment, base synchronization, and retirement checkpoints. Do not interrupt a child task merely to answer or investigate a new message; apply the linked coordinator message and commitment protocol for routing and recovery.
 
-For several or long-running App tasks, or when the user explicitly requests low-cost monitoring, the coordinator may add one optional read-only listener associated with the delivery graph's saved project and title it `<project-name> 任务监听器`, but only after the target-host capability probe succeeds. Keep a single short task on direct coordinator waits, and do not reuse a project listener across projects or default it to projectless. Before creating, reusing, or migrating a listener, read and follow [the project task-listener protocol and reusable prompts](references/task-listener.md); the coordinator remains the independent acceptance authority.
+For several parallel or long-running App tasks, materially noisy direct coordination, or an explicit request for low-cost or independent event observation, the coordinator may add one optional read-only listener associated with the delivery graph's saved project and title it `<project-name> 任务监听器`, but only after the target-host capability probe succeeds. Keep an ordinary single task on `target-self`, and do not reuse a project listener across projects or default it to projectless. Before creating, reusing, migrating, or transferring notification ownership to a listener, read and follow [the project task-listener protocol and reusable prompts](references/task-listener.md); the coordinator remains the independent acceptance authority.
 
-Completion criterion: each active lane has one current owner and the ledger matches its actual branch, HEAD, and MR state.
+Completion criterion: each active lane has one current implementation owner and exactly one notification owner, and the ledger matches its actual branch, HEAD, MR, and notification state.
 
 ## Review each child MR
 
@@ -124,7 +128,7 @@ Completion criterion: each active lane has one current owner and the ledger matc
 3. If the `code-review` skill is available, run its two axes from the fixed base:
    - Standards: repository rules, architecture, tests, security, and maintainability.
    - Spec: required behavior, missing behavior, wrong behavior, and extra scope.
-4. Adjudicate findings yourself. Return actionable blockers to the same owning App task, with file/line evidence and required acceptance tests. Before sending a review fix or follow-up to a task whose listener cycle already ended at terminal, rearm it under the [review-fix observation-cycle protocol](references/task-listener.md#rearm-a-completed-target-for-review-follow-up) and confirm `active-wait`; if the follow-up was sent first, the coordinator owns immediate direct recovery from the previous terminal cursor.
+4. Adjudicate findings yourself. Return actionable blockers to the same owning App task, with file/line evidence and required acceptance tests. If `notificationOwner=target-self`, send the follow-up directly to the original task with the coordinator's exact notification address; no listener rearm is required. Only when `notificationOwner=listener` and the listener is currently `active-wait`, rearm the completed target under the [review-fix observation-cycle protocol](references/task-listener.md#rearm-a-completed-target-for-review-follow-up) before sending the follow-up. If rearm fails or the route is unsupported, first switch ownership back to `target-self`, then send the follow-up with the exact notification address. If a listener-owned follow-up was sent before rearm, the coordinator owns immediate direct recovery from the previous terminal cursor.
 5. Re-run the relevant checks and both review axes after fixes. A worker's self-review does not replace coordinator review.
 6. Merge only when blockers are closed and the MR still targets the intended integration branch.
 
