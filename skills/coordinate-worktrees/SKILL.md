@@ -124,7 +124,7 @@ Completion criterion: each active lane has one current owner and the ledger matc
 3. If the `code-review` skill is available, run its two axes from the fixed base:
    - Standards: repository rules, architecture, tests, security, and maintainability.
    - Spec: required behavior, missing behavior, wrong behavior, and extra scope.
-4. Adjudicate findings yourself. Return actionable blockers to the same owning App task, with file/line evidence and required acceptance tests.
+4. Adjudicate findings yourself. Return actionable blockers to the same owning App task, with file/line evidence and required acceptance tests. Before sending a review fix or follow-up to a task whose listener cycle already ended at terminal, rearm it under the [review-fix observation-cycle protocol](references/task-listener.md#rearm-a-completed-target-for-review-follow-up) and confirm `active-wait`; if the follow-up was sent first, the coordinator owns immediate direct recovery from the previous terminal cursor.
 5. Re-run the relevant checks and both review axes after fixes. A worker's self-review does not replace coordinator review.
 6. Merge only when blockers are closed and the MR still targets the intended integration branch.
 

@@ -40,6 +40,7 @@ Record the listener outside the Git lane list with:
 - `listenerEnvironmentType: local` for the non-worktree `create_thread` mode, recorded separately from project `projectKind` and `hostId`;
 - `listenerThreadId`, `listenerProjectId`, its `hostId`, effective `model` and `reasoning`, plus `modelSource` and `reasoningSource`, when a listener exists;
 - active targets as task name, `threadId`, `hostId`, and latest cursor;
+- each completed observation cycle's task name, `threadId`, `hostId`, terminal cursor, and notification disposition, kept outside the active target set so the coordinator can start a later cycle without replaying the old terminal event;
 - `listenerLifecycle`, such as `creating`, `active-wait`, `listener-unsupported-target-host`, `migration-pending`, `superseded-retained`, or `archived`;
 - for a degraded route, `notificationFallback: direct-self-notification`, the fallback message attempt, and whether its terminal or attention notification was delivered, retried once, or remains undelivered.
 
@@ -48,9 +49,20 @@ Record the listener outside the Git lane list with:
 1. Give the listener the coordinator task's title, exact `threadId` and `hostId`, and its `projectId` when present; record the project ID as empty when the existing coordinator is unassociated. The exact thread and host are the notification address—never infer the destination from title or project association. Add each initial target's task name, `threadId`, `hostId`, and latest cursor when one exists.
 2. Maintain an active target set and cursor per target. Treat later target messages as additive: add same-project targets without discarding active ones. Remove, pause, or replace a nonterminal target only when the message explicitly names it and requests that lifecycle change. Do not add a ninth active target or a target from another project.
 3. Call `wait_threads` with the active targets and their latest cursors. A new message may end the current wait early; after handling it, rebuild the active target and cursor map and resume the event wait. Do not emit fixed-period heartbeats, repeatedly call `read_thread`, or narrate unchanged state. Use `read_thread` only if the wait result lacks the final summary needed for the permitted notification.
-4. On completion, send the coordinator only the task name, `threadId`, terminal status, and final summary. On a blocker or request for input, send only a minimal attention notice with the task name, `threadId`, status, and requested decision. Never send progress chatter or perform acceptance.
+4. On completion, send the coordinator only the task name, `threadId`, `hostId`, terminal status, terminal cursor, and final summary. On a blocker or request for input, send only a minimal attention notice with the task name, `threadId`, status, and requested decision. Never send progress chatter or perform acceptance.
 5. Each completion or attention notice is one logical notification. A failed or timed-out `send_message_to_thread` call does not prove delivery; retry at most once as transport recovery. If the retry also fails or times out, state clearly in the listener task that the notification was not delivered and never record it as delivered.
 6. After a terminal status, complete the notification attempt and remove that target. Continue waiting for the remaining active targets. When none remain, stay available for later same-project targets without inventing a heartbeat schedule.
+
+## Rearm a completed target for review follow-up
+
+A terminal notification and removal close one observation cycle; they do not make that task permanently ineligible. Sending a review fix or follow-up to the same completed task starts a new observation cycle, but does not reactivate the listener by itself.
+
+1. When a cycle reaches terminal, the coordinator records the notification's terminal cursor with the target's existing `threadId` and `hostId`. Keep that completed cycle outside the listener's active target set.
+2. Before sending the review fix or follow-up, the coordinator re-registers the target with the same `threadId`, the same `hostId`, and the previous terminal cursor. The listener treats this explicit registration as a new cycle, waits from that cursor, and confirms it has entered `active-wait`; only then may the coordinator send the target message.
+3. If the coordinator already sent the target message, it must immediately call `wait_threads` directly for that exact `threadId` and `hostId`, starting from the previous terminal cursor. Do not assume the listener recovered automatically. If the recovered event is terminal, handle it directly and leave the target inactive. If the target remains nonterminal, record the latest returned cursor, re-register the listener from that cursor, and confirm `active-wait` before returning observation ownership to it.
+4. On the new cycle's terminal event, make one logical notification with the new terminal cursor and remove the target again. Cursor continuity must suppress the prior terminal event and duplicate notification.
+
+Never keep historical terminal targets permanently active, infer a new cycle from target activity, poll for one, or expand the listener's read-only boundary. Only an explicit coordinator registration starts another listener cycle.
 
 ## Migrate a projectless listener
 
@@ -104,12 +116,16 @@ Observe only with event-driven wait_threads calls. Keep the latest cursor per ta
 
 Later messages are additive by default. Append targets from this same project without dropping active targets; reject cross-project targets and do not add a ninth active target. Remove, pause, or replace a nonterminal target only when a message explicitly names it and requests that lifecycle change. A new message may end the current wait early, so rebuild the active target and cursor map after handling it and resume waiting. After a terminal status, complete the notification attempt, remove that target, and continue observing the rest.
 
+A terminal removal closes one observation cycle, not the task forever. If the coordinator explicitly re-registers that completed task for a review fix or follow-up, add it as a new cycle with the same threadId, same hostId, and supplied previous terminal cursor; enter active-wait from that cursor and make the listener state confirmable as `active-wait`. Do not replay the old terminal event, infer reactivation from new target activity, or reactivate without the coordinator's explicit registration. If the target follow-up was already sent, do not assume observation resumed; only accept a nonterminal re-registration from the latest cursor the coordinator recovered with a direct wait.
+
 You may only wait for or read task state and notify the coordinator. Do not read the repository, edit code, run tests, inspect or operate on Git or an MR or PR, deploy, perform acceptance, merge, synchronize a base checkout, retire a worktree, message implementation tasks, or answer blockers or input requests on the user's behalf.
 
 When a target completes, use send_message_to_thread to send the coordinator only:
 - task name
 - threadId
+- hostId
 - terminal status
+- terminal cursor
 - final summary
 
 When a target is blocked or requests input, send only a minimal attention notice with task name, threadId, status, and requested decision. Each event gets one logical notification. A send failure or timeout is not delivery; retry at most once, then clearly report undelivered status in this listener task and do not claim otherwise.
