@@ -78,11 +78,12 @@ Completion criterion: every implementation unit has one owner, an explicit base,
 
 ## Dispatch a persistent lane
 
-1. Resolve the saved project with `codex_app__list_projects`.
-2. Create the task with `codex_app__create_thread`, target the project, choose the native `worktree` environment, and set `startingState.branchName` to the existing integration branch or required parent branch. Prefer the App's native worktree over manual `git worktree` commands.
+1. Resolve the saved project with `codex_app__list_projects` from the current invocation entry point. Before creating the task, record the returned project path, `projectKind`, and `hostId`, together with that entry point; do not infer a local route from a matching path or project name, or reuse another entry point's earlier classification.
+2. When event-driven monitoring is requested, explain before creation how the observed target host affects monitoring. When a currently returned local project route is available and the user did not explicitly choose remote or mobile execution, prefer keeping the coordinator, target, and listener on that monitorable local route. Preserve an explicit remote or mobile choice.
+3. Create the task with `codex_app__create_thread`, target the selected project route, choose the native `worktree` environment, and set `startingState.branchName` to the existing integration branch or required parent branch. Prefer the App's native worktree over manual `git worktree` commands.
    Unless the user explicitly selected a model or reasoning level, leave those overrides unset so the task uses configured defaults.
-3. Give the task a searchable title. Leave it unpinned unless the user explicitly requests pinning; do not use sidebar order as coordination state.
-4. Send a self-contained brief containing:
+4. Give the task a searchable title. Leave it unpinned unless the user explicitly requests pinning; do not use sidebar order as coordination state.
+5. Send a self-contained brief containing:
    - role: independent main task, not a one-shot worker;
    - exact scope, owned files/modules, and excluded scope;
    - base branch and base SHA;
@@ -93,7 +94,8 @@ Completion criterion: every implementation unit has one owner, an explicit base,
    - requirement to commit, verify, push, and open a Draft MR;
    - prohibition on self-merging; the coordinator owns review and merge;
    - required final report: worktree, branch, HEAD, MR URL, tests, and blockers.
-5. Codex App worktrees can begin at detached HEAD. Require the lane to create and verify its named branch before its first edit or commit.
+6. Codex App worktrees can begin at detached HEAD. Require the lane to create and verify its named branch before its first edit or commit.
+7. If event-driven monitoring was requested, after target creation and before declaring monitoring active, make one `wait_threads` capability probe for that target with `timeoutMs: 0`. A supported nonterminal or timeout result proves the handler route without implying completion. If the probe reports no registered handler or an equivalent unsupported target-host route, follow the listener protocol's `listener-unsupported-target-host` fallback; do not create another listener, poll, or claim monitoring is active. Base this decision on the current returned route and probe, not a permanent assumption about mobile, remote, or any named host.
 
 If native App thread/worktree tools are unavailable, report that boundary. Do not silently replace a requested persistent lane with a hidden subagent or an unmanaged manual worktree.
 
@@ -111,7 +113,7 @@ Completion criterion: the task is visible in Codex App, attached to its own work
 
 Treat later user messages to the coordinator as additive unless they explicitly name a target and request a lifecycle change. New user input can end `wait_threads` or the current turn early; after handling it, rebuild the active lane and commitment ledger and resume unfinished acceptance, merge, deployment, base synchronization, and retirement checkpoints. Do not interrupt a child task merely to answer or investigate a new message; apply the linked coordinator message and commitment protocol for routing and recovery.
 
-For several or long-running App tasks, or when the user explicitly requests low-cost monitoring, the coordinator may add one optional read-only listener associated with the delivery graph's saved project and title it `<project-name> 任务监听器`. Keep a single short task on direct coordinator waits, and do not reuse a project listener across projects or default it to projectless. Before creating, reusing, or migrating a listener, read and follow [the project task-listener protocol and reusable prompt](references/task-listener.md); the coordinator remains the independent acceptance authority.
+For several or long-running App tasks, or when the user explicitly requests low-cost monitoring, the coordinator may add one optional read-only listener associated with the delivery graph's saved project and title it `<project-name> 任务监听器`, but only after the target-host capability probe succeeds. Keep a single short task on direct coordinator waits, and do not reuse a project listener across projects or default it to projectless. Before creating, reusing, or migrating a listener, read and follow [the project task-listener protocol and reusable prompts](references/task-listener.md); the coordinator remains the independent acceptance authority.
 
 Completion criterion: each active lane has one current owner and the ledger matches its actual branch, HEAD, and MR state.
 

@@ -4,8 +4,11 @@ Use one optional listener per project when several App tasks or long-running tas
 
 ## Create and classify the listener
 
-- Resolve the saved project for the delivery graph. Create the listener under that project and title it `<project-name> 任务监听器`; the coordinator task itself may remain unassociated when it predates project-scoped coordination.
-- For a Git saved project, use the project with a `local` environment as a classification surface, not as a Git lane. The listener remains strictly read-only even though its working directory may expose the repository.
+- Resolve the saved project for the delivery graph from the current invocation entry point. Record the exact project path, `projectKind`, and `hostId` returned by that call, plus the invocation entry point and observation time. A matching path or project name does not prove that another entry point will select the same host.
+- If the user requested event-driven monitoring, explain the observed host's monitoring implications before creating the target. Prefer a currently returned local project route for the coordinator, target, and listener when it is available and the user has not explicitly chosen remote or mobile execution. Do not override an explicit remote or mobile choice.
+- After target creation and before announcing a listener as active, make one capability probe with `wait_threads`, the target's actual `threadId` and `hostId`, and `timeoutMs: 0`. A supported nonterminal snapshot or timeout means the handler route is available; it does not mean the target completed. Do not classify a route from `projectKind` or `hostId` alone.
+- When the probe succeeds, create or reuse the listener under the selected project route and title it `<project-name> 任务监听器`; the coordinator task itself may remain unassociated when it predates project-scoped coordination. For a Git saved project, project association is a classification surface, not a Git lane. The listener remains strictly read-only even when its working directory exposes the repository.
+- When the probe reports `No handler registered for tool: codex_app.wait_threads` or an equivalent unsupported target-host route, set `listenerLifecycle` to `listener-unsupported-target-host`. Do not create or recreate a listener for that target, use fixed polling, repeatedly call `read_thread`, or claim monitoring is active. Instead, append the direct self-notification fallback below to the target once and record the degraded route.
 - Give it a self-contained observer brief. It is independent and does not inherit the coordinator's repository or business context.
 - Monitor only tasks from that project. Keep at most eight active targets in one project listener; leave overflow with the coordinator or an explicitly separate project-scoped listener rather than mixing projects.
 - Use projectless only when no saved project exists, or for temporary cross-project observation after the user explicitly accepts mixed classification. Never make that fallback a project's default or silently reuse it across projects.
@@ -32,9 +35,12 @@ The coordinator retains handoff reading, partitioning, dispatch, ledger maintena
 Record the listener outside the Git lane list with:
 
 - `coordinatorTitle`, exact `coordinatorThreadId`, `coordinatorHostId`, and `coordinatorProjectId` (including an explicit empty value);
-- `listenerThreadId`, `listenerProjectId`, its `hostId`, effective `model` and `reasoning`, plus `modelSource` and `reasoningSource`;
+- project-resolution snapshot: project path, `projectKind`, `hostId`, invocation entry point, and observation time;
+- probe target `threadId` and `hostId`, probe result, and probe time;
+- `listenerThreadId`, `listenerProjectId`, its `hostId`, effective `model` and `reasoning`, plus `modelSource` and `reasoningSource`, when a listener exists;
 - active targets as task name, `threadId`, `hostId`, and latest cursor;
-- `listenerLifecycle`, such as `creating`, `active-wait`, `migration-pending`, `superseded-retained`, or `archived`.
+- `listenerLifecycle`, such as `creating`, `active-wait`, `listener-unsupported-target-host`, `migration-pending`, `superseded-retained`, or `archived`;
+- for a degraded route, `notificationFallback: direct-self-notification`, the fallback message attempt, and whether its terminal or attention notification was delivered, retried once, or remains undelivered.
 
 ## Follow the event-driven protocol
 
@@ -49,7 +55,9 @@ Record the listener outside the Git lane list with:
 
 Do not claim that an existing task's `projectId` can be changed in place.
 
-1. Resolve the saved project and create a new project-associated, local, read-only listener with the recommended title.
+Likewise, returning to the desktop or another invocation entry point only affects later `list_projects` and `create_thread` choices. It does not migrate an existing remote target, change its host, or make an unsupported listener route active. Re-resolve the project and repeat the one-shot capability probe for each newly created target because host capabilities may change; do not hardcode mobile, remote, slingshot, or any other host as permanently unsupported.
+
+1. Resolve the saved project and create a new project-associated, read-only listener on a currently capability-proven route with the recommended title.
 2. Give it the same `coordinatorThreadId` and the coordinator/project/host details, then migrate any active target handles and latest cursors. An already completed old listener may have no active targets; record that empty set instead of inventing a migration.
 3. Add the current same-project targets and confirm from the new listener's task state that it registered them and entered `active-wait` before declaring the migration active.
 4. Tell an active old projectless listener to drop migrated targets and record it as `superseded-retained`. If it is already complete with no targets, record that observed state. If overlap cannot be eliminated, record it and deduplicate notifications at the coordinator.
@@ -57,7 +65,7 @@ Do not claim that an existing task's `projectId` can be changed in place.
 
 ## Reusable project listener prompt
 
-Create the task under `<PROJECT_ID>` with a `local` environment and title `<PROJECT_NAME> 任务监听器`. Replace the placeholders and add targets using the same four-field shape.
+Create the task under the currently selected and capability-proven `<PROJECT_ID>` route and title it `<PROJECT_NAME> 任务监听器`. Replace the placeholders and add targets using the same four-field shape.
 
 ```text
 You are an independent, project-associated, strictly read-only Codex App task listener. Project association is only for discoverability; you are not a Git delivery lane and do not inherit the coordinator's repository or business context.
@@ -65,6 +73,10 @@ You are an independent, project-associated, strictly read-only Codex App task li
 Project classification:
 - project name: <PROJECT_NAME>
 - projectId: <PROJECT_ID>
+- project path: <PROJECT_PATH>
+- projectKind: <PROJECT_KIND_FROM_CURRENT_LIST_PROJECTS>
+- project hostId: <PROJECT_HOST_ID_FROM_CURRENT_LIST_PROJECTS>
+- resolution entry point: <CURRENT_INVOCATION_ENTRY_POINT>
 
 Notify only this project coordinator:
 - coordinator title: <COORDINATOR_TITLE>
@@ -101,4 +113,21 @@ When a target completes, use send_message_to_thread to send the coordinator only
 When a target is blocked or requests input, send only a minimal attention notice with task name, threadId, status, and requested decision. Each event gets one logical notification. A send failure or timeout is not delivery; retry at most once, then clearly report undelivered status in this listener task and do not claim otherwise.
 
 Model and reasoning are independent: low reasoning does not select a lower-cost model. Apply only settings authorized under the coordinator's model-choice rule. A later authorized change affects subsequent listener turns, not the implementation tasks being observed. The coordinator independently validates all results and retains review, merge, deployment, base synchronization, and worktree retirement authority.
+```
+
+## Reusable direct self-notification fallback
+
+Use this only after the one-shot capability probe classifies the target as `listener-unsupported-target-host`. Send it once to the existing target; do not create a replacement target or listener. This fallback routes the target's own terminal or attention state and is not event-driven observation.
+
+```text
+The coordinator could not register event-driven wait_threads monitoring for this task's current host. Do not change execution host, create a listener, poll another task, or claim that monitoring is active.
+
+Notify only this coordinator when your own task reaches a terminal state or needs attention:
+- coordinator title: <COORDINATOR_TITLE>
+- coordinator threadId: <COORDINATOR_THREAD_ID>
+- coordinator hostId: <COORDINATOR_HOST_ID>
+
+For completion, send only your task name, threadId, `completed`, and final summary. For a blocker or input request, send only your task name, threadId, `blocked` or `needs_attention`, and the requested decision. Each state gets one logical notification. If `send_message_to_thread` fails or times out, retry at most once; if that retry also fails, report the notification as undelivered in your own task and do not claim delivery.
+
+This routing permission does not authorize you to inspect or accept other tasks, perform independent acceptance, merge, deploy, synchronize a base checkout, retire worktrees, or expand your assigned scope. The coordinator retains all acceptance and lifecycle authority.
 ```
