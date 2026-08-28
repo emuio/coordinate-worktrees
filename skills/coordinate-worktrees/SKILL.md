@@ -55,14 +55,24 @@ Completion criterion: the delivery graph has one dynamically resolved final base
 
 ## Choose model and reasoning settings
 
-Choose the execution surface first; model and reasoning settings are a secondary decision. Do not present automatic difficulty-based model routing as a Codex default.
+Choose the execution surface first, then classify the implementation risk before creating the task. Risk is determined by the consequence of an error, authority boundaries, state persistence, rollback quality, and unresolved ambiguity; task size or a vague impression of difficulty is not enough.
+
+Unless the user explicitly selected another setting, pass `thinking` explicitly for each new implementation App task:
+
+| Risk | Reasoning | Use when |
+| --- | --- | --- |
+| Routine | `medium` | Bounded UI, documentation, tests, or mechanical refactors with a clear spec, isolated files, no security authority change, no persistent-data migration, no deployment, and no real-service write |
+| Elevated | `high` | Cross-service contracts, authentication or authorization, persistent database mapping or migration, concurrency or idempotency, deployment and rollback, real-service write canaries, or materially ambiguous integration |
+| Critical | `xhigh` | Irreversible or production mutation, security-authority or tenant-isolation changes, credible data-loss risk, a coordinated multi-repository release with weak rollback, or two consecutive failed review/fix cycles that expose unresolved design ambiguity |
+
+Keep the configured default model unless the user explicitly chooses another model. Do not automatically select `max`; reserve it for an explicit user choice. If the selected host or model rejects the required effort, report the mismatch and obtain a supported choice instead of silently falling back. Reclassify before a follow-up turn when the scope or evidence crosses a risk boundary; do not interrupt an in-progress task only to change its setting.
 
 | Surface | Default behavior | Coordinator rule |
 | --- | --- | --- |
 | Full-history collaboration subagent | Inherits the parent task's current model and reasoning effort | Keep inheritance unless the user, applicable instructions, or the selected skill explicitly requires an override and the spawn form permits it |
-| New Codex App task | Uses configured defaults when model and reasoning overrides are omitted; it does not inherit the coordinator task's transient settings | Do not silently pin or change settings; when the choice materially affects the work, state the expected default and obtain an explicit choice before overriding it |
+| New implementation Codex App task | Uses the configured default model and the explicit risk-classified reasoning effort; it does not inherit the coordinator task's transient settings | Pass the risk-classified `thinking` value during creation, state the classification in the brief, and let an explicit user choice override it |
 
-Record the model, reasoning effort, and their source when known: inherited, configured default, or explicitly pinned. Do not add project or global custom agents merely to route persistent App tasks; those tasks have their own configuration path.
+Record the model, reasoning effort, risk classification, and their source when known: inherited, configured default, skill risk profile, or explicit user choice. Do not add project or global custom agents merely to route persistent App tasks; those tasks have their own configuration path.
 
 ## Establish the delivery graph
 
@@ -81,7 +91,7 @@ Completion criterion: every implementation unit has one owner, an explicit base,
 1. Resolve the saved project with `codex_app__list_projects` from the current invocation entry point. Before creating the task, record the returned project path, `projectKind`, and `hostId`, together with that entry point; do not infer a local route from a matching path or project name, or reuse another entry point's earlier classification.
 2. When event-driven monitoring is requested, explain before creation how the observed target host affects monitoring. When a currently returned local project route is available and the user did not explicitly choose remote or mobile execution, prefer that route for future target and listener creation. This preference does not migrate the existing coordinator or any existing target to another host. Preserve an explicit remote or mobile choice.
 3. Create the task with `codex_app__create_thread`, target the selected project route, choose the native `worktree` environment, and set `startingState.branchName` to the existing integration branch or required parent branch. Prefer the App's native worktree over manual `git worktree` commands.
-   Unless the user explicitly selected a model or reasoning level, leave those overrides unset so the task uses configured defaults.
+   Unless the user explicitly selected a reasoning level, classify the task with the risk table above and pass its `thinking` value explicitly. Leave the model override unset so the task uses the configured default model unless the user explicitly chose another model.
 4. Give the task a searchable title. Leave it unpinned unless the user explicitly requests pinning; do not use sidebar order as coordination state.
 5. Send a self-contained brief containing:
    - role: independent main task, not a one-shot worker;
@@ -89,6 +99,7 @@ Completion criterion: every implementation unit has one owner, an explicit base,
    - base branch and base SHA;
    - required design, plan, and repository instruction paths;
    - required tests and any known baseline failures;
+   - risk classification, explicit reasoning effort, configured or selected model source, and the evidence that justified the classification;
    - dedicated `codex/` branch name and target integration branch;
    - commit identity and message rules from the repository;
    - requirement to commit, verify, push, and open a Draft MR;
