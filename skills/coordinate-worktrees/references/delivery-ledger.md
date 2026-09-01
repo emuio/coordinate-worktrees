@@ -27,7 +27,7 @@ delivery:
     handoffs: []
   modelRouting:
     mode: adaptive-profile
-    profile: risk-based-adaptive
+    profile: sol-first-adaptive
     source: skill-default
     accountContext: null
   authority:
@@ -169,9 +169,10 @@ Use explicit empty values when a field is not applicable. Do not fabricate a `th
 ### Model routing
 
 - `delivery.modelRouting.mode` is `adaptive-profile` by default. Use `explicit-pins` for exact user-selected task settings and `configured-default` only when the user explicitly requests no task-level overrides. A higher-priority applicable instruction may replace any mode.
-- The default profile is `risk-based-adaptive`. `accountContext` is user-reported context such as `Pro 20x`, not a claim that the coordinator verified account entitlements; when that context is present, use `profile: quality-biased-pro20x`.
+- The default profile is `sol-first-adaptive`. `accountContext` is user-reported context such as `Pro 20x`, not a claim that the coordinator verified account entitlements and not a reason to switch profiles.
 - Model and reasoning sources are `inherited`, `configured-default`, `explicit-user-choice`, `skill-default-adaptive-profile`, or `higher-priority-policy`. Every adaptive selection records `routingRisk` (`routine`, `elevated`, or `critical`), `difficultySource` (`throughput`, `execution`, or `judgment`), and a concise `selectionReason`.
-- Classify risk from error consequences, authority boundaries, persistent state, rollback quality, and unresolved ambiguity; task size alone is not a risk class. Elevated risk sets high as the minimum effort, and critical risk sets xhigh as the minimum. Never automatically select max or ultra.
+- Adaptive implementation lanes use Sol by default. Classify risk from error consequences, authority boundaries, persistent state, rollback quality, unresolved ambiguity, and verification difficulty; task size alone is not a risk class. Routine work uses medium, elevated risk sets high as the minimum effort, and critical risk sets xhigh as the minimum. Never automatically select max or ultra.
+- Terra or Luna requires an exact user selection, a higher-priority policy, or an explicit user request prioritizing economy or high throughput. Without an exact model pin, Terra is limited to bounded implementation with reliable verification and Luna to repetitive, mechanical, high-volume work with deterministic checks; preserve the task's reasoning-effort floor.
 - Do not reuse the model or reasoning strength of the last manually created task as a routing source. On resume or coordinator handoff, preserve the recorded profile and per-lane selections, but reassess settings for newly scoped lanes and review-fix cycles.
 - A coordinator recommendation is not a self-applied setting change. The user changes the coordinator task's own model or reasoning strength; the coordinator applies the default adaptive profile only to new implementation App tasks and supported follow-up overrides.
 
