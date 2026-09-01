@@ -26,3 +26,16 @@ New user input can end an active `wait_threads` call or the coordinator's curren
 5. Re-enter event-driven waits with current cursors when waiting is still the next action.
 
 Completion criterion: responding to a later message changes only explicitly targeted lifecycle state, while every other lane, listener target, and recorded delivery commitment remains owned and resumable.
+
+## Transfer coordinator ownership
+
+Use a ledger handoff when a different task becomes the coordinator. A task handoff or a copied summary does not by itself transfer notification routing, release ownership, or retirement commitments.
+
+1. The source checkpoint records the old coordinator's exact address, every non-retired lane, current task and Git state, all event receipts and pending effects, every release batch and disposition, authorities, and pending acceptance, deployment, base-sync, archive, and retirement actions.
+2. The destination records its exact coordinator address and imports the complete source lane set. Compare `sourceLaneIds` with `inheritedLaneIds`; a missing lane blocks completion even if that lane is terminal or was created before the current release.
+3. For each nonterminal target, preserve old receipts, assign a new `notificationCycleId` marked as a coordinator-handoff cycle, and send a bounded routing update containing the new coordinator `threadId` and `hostId`. Record delivery or an honest blocker. Do not create a listener or change `notificationOwner=target-self` to compensate for stale routing.
+4. For each terminal target, do not start a no-op follow-up merely to change its address. Import its terminal receipt, verify current task, Git, and review state, then immediately record acceptance, current release disposition, and retirement status.
+5. Rebuild the active release batch across the complete inherited lane set. Completed lanes require `include`, `defer`, `blocked`, or `not-applicable` before any deployment; a lane is not exempt because its completion notice went to the old coordinator.
+6. Mark the handoff complete only after all lanes are inherited, all nonterminal routes are updated or blocked explicitly, terminal lanes are reconciled, and unfinished effects remain resumable without replay.
+
+The destination coordinator owns subsequent verification, but it does not inherit authority that the source never had. Preserve the recorded source for every action authority and request new authorization when the destination's intended action is outside it.

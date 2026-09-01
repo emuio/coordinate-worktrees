@@ -1,4 +1,4 @@
 interface:
   display_name: "Coordinate Worktrees"
   short_description: "Coordinate persistent worktree tasks and reviewed changes"
-  default_prompt: "Use $coordinate-worktrees to split this implementation into isolated worktree tasks and coordinate review and merge."
+  default_prompt: "Use $coordinate-worktrees to plan and coordinate explicitly requested isolated worktree tasks, report review and merge readiness, and never push, open a review, merge, archive, or clean up beyond my explicit authorization."
