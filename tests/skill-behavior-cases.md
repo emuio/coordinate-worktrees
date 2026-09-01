@@ -226,25 +226,30 @@ Forbidden decisions:
 
 Required evidence: source and destination coordinator addresses, source and inherited lane IDs, per-active-lane routing update, per-terminal-lane reconciliation, preserved receipts, and handoff state.
 
-## 13. User-authorized Pro 20x adaptive routing
+## 13. Default risk-based Pro 20x adaptive routing
 
-Prompt: "I use Pro 20x. Choose the model and reasoning strength for each new task: one lane is a repetitive catalog audit, one is a clear production UI implementation, and one is a cross-module authentication and database migration. Keep coordinating and reviewing here."
+Prompt: "Use `$coordinate-worktrees` to create three implementation tasks: one is a repetitive catalog audit, one is a clear production UI implementation, and one changes cross-module authentication and database mappings. I use Pro 20x. Keep coordinating and reviewing here."
 
 Expected decisions:
 
-- Record `modelRouting.mode=adaptive-profile`, `profile=quality-biased-pro20x`, and the exact user instruction as its source.
+- Apply adaptive routing without asking the user to choose task settings. Record `modelRouting.mode=adaptive-profile`, `profile=quality-biased-pro20x`, `source=skill-default`, and the user-reported account context.
 - Select Luna / medium for the repetitive low-risk audit, Terra / high for the ordinary well-defined production implementation, and Sol / high for the cross-module security and database lane.
-- Record `source=user-authorized-adaptive-profile` and a task-specific `selectionReason` for every override.
+- Record `source=skill-default-adaptive-profile`, `routingRisk`, `difficultySource`, and a task-specific `selectionReason` for every override.
 - Recommend Sol / high for the coordinator if its current setting is mismatched, but leave the current coordinator setting unchanged and continue authorized work.
-- Reassess a lane after material scope change or repeated failure instead of carrying forward its original choice mechanically.
+- Reassess a lane after a material scope or risk change and before a follow-up turn instead of carrying forward its original choice mechanically.
 
 Forbidden decisions:
 
 - Replacing every Terra task with Sol merely because the account has 20x usage.
 - Applying Sol / xhigh to every lane, or treating xhigh as a default quality switch.
+- Automatically selecting max or ultra.
 - Copying the model or reasoning strength from the last manually launched task.
 - Claiming that the coordinator changed its own model or reasoning setting.
 
-Required evidence: routing mode and source, user-reported account context, per-lane model, reasoning strength, selection reason, and any coordinator-setting recommendation.
+Required evidence: routing mode and source, user-reported account context, per-lane risk, primary difficulty, model, reasoning strength, selection reason, and any coordinator-setting recommendation.
 
-Variant: when the user has not selected exact settings and has not authorized adaptive routing, keep `modelRouting.mode=configured-default` and omit App task model and reasoning overrides.
+Variants:
+
+- A lane performs an irreversible production mutation affecting tenant isolation with weak rollback. Classify it `critical` and use Sol / xhigh even if the patch is small.
+- Two review/fix cycles fail and expose unresolved design ambiguity. Reclassify the follow-up as `critical`; do not interrupt a currently running turn solely to change settings.
+- When the user explicitly requests configured defaults, set `modelRouting.mode=configured-default` and omit App task model and reasoning overrides. Exact user pins instead use `explicit-pins`.

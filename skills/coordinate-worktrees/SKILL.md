@@ -58,22 +58,24 @@ Use only a registered coordinator-owned or explicitly selected base checkout. Be
 ## Choose model and reasoning settings
 
 - A full-history collaboration subagent inherits the parent task's current model and reasoning effort.
-- A new App task uses configured defaults when overrides are omitted; it does not inherit the coordinator's transient settings.
-- New App task settings have three sources: configured defaults, exact user-selected pins, or a user-authorized adaptive routing profile. A request for the coordinator to choose per task authorizes adaptive selection for the current delivery graph; record that scope and source instead of inheriting the last manually launched task's settings.
-- When no exact pin or adaptive profile is authorized, omit model and reasoning overrides. Validate any selected override against the current task-creation capability; do not send a stale model name or unsupported effort.
+- A new implementation App task uses risk-based adaptive model and reasoning selection by default; it does not inherit the coordinator's transient settings or the last manually launched task's settings.
+- Exact user-selected pins, a higher-priority applicable instruction, or an explicit request to use configured defaults overrides adaptive routing. This selection rule changes task configuration only; it does not authorize task creation or any Git, review, deployment, or retirement action.
+- Validate every selected override against the current task-creation capability. Use the closest supported setting only when it preserves the same risk floor; otherwise report the mismatch and obtain a supported choice instead of silently downgrading.
 
-For a user who reports Pro 20x and requests quality-biased adaptive routing, use the `quality-biased-pro20x` profile. It deliberately keeps Terra instead of replacing every lane with Sol:
+Before selecting a setting, classify risk from the consequence of an error, authority boundaries, state persistence, rollback quality, and unresolved ambiguity. Task size or a vague impression of difficulty is not enough. Use `routine`, `elevated`, or `critical`; the risk level is an effort floor, while the primary difficulty selects the model family.
 
-| Primary difficulty | New implementation task |
+Use the `risk-based-adaptive` profile by default. When the user reports Pro 20x, record that context and use its quality-biased variant, `quality-biased-pro20x`. It deliberately keeps Terra instead of replacing every lane with Sol:
+
+| Risk and primary difficulty | New implementation task |
 | --- | --- |
-| Repetitive, mechanical, high-volume, and low-risk | Luna / medium |
-| Narrow, clear, and low-risk implementation | Terra / medium |
-| Ordinary well-defined production implementation and verification | Terra / high |
-| Bounded work whose main difficulty is interpretation or judgment | Sol / medium |
-| Ambiguous cross-module work, architecture, security, protocols, database changes, complex diagnosis, or final integration review | Sol / high |
-| Exceptional high-stakes reasoning or repeated failure to converge | Sol / xhigh |
+| Routine, repetitive, mechanical, or high-volume | Luna / medium |
+| Routine, narrow, clear, and low-risk implementation | Terra / medium |
+| Ordinary production implementation with multi-step verification | Terra / high |
+| Routine, bounded work whose main difficulty is interpretation or judgment | Sol / medium |
+| Elevated: cross-service contracts, authentication or authorization, persistent-data changes, concurrency or idempotency, deployment or rollback, real-service writes, material ambiguity, or final integration review | Sol / high |
+| Critical: irreversible production mutation, security-authority or tenant-isolation change, credible data-loss risk, coordinated multi-repository release with weak rollback, or two failed review/fix cycles exposing unresolved design ambiguity | Sol / xhigh |
 
-Choose the family from the source of difficulty: understanding and judgment favor Sol, multi-step implementation and verification favor Terra, and throughput favors Luna. Choose reasoning effort from ambiguity and risk. Pro 20x permits a quality bias but is not unlimited and does not remove latency, so do not blanket-upgrade all lanes to Sol or xhigh. Reassess after scope changes, repeated failures, and the transition from design to deterministic closure; record the profile, selected model, effort, and one-sentence rationale per lane.
+Choose the family from the source of difficulty: understanding and judgment favor Sol, multi-step implementation and verification favor Terra, and throughput favors Luna. Choose reasoning effort from ambiguity and risk. An elevated task must not run below high and a critical task must not run below xhigh merely because its edits are mechanical. Do not automatically select max or ultra; they require an exact user choice or higher-priority policy. Pro 20x permits a quality bias but is not unlimited and does not remove latency, so do not blanket-upgrade all lanes to Sol or xhigh. Reassess before a follow-up when scope or evidence crosses a risk boundary and at the transition from design to deterministic closure; do not interrupt an in-progress task only to reconfigure it. Record the profile, risk, difficulty source, selected model, effort, and one-sentence rationale per lane.
 
 For the coordinator task itself, `quality-biased-pro20x` recommends Sol / high as the normal coordination setting, Sol / xhigh only for exceptional architecture, security, release, or non-converging decisions, and medium for sustained deterministic closure. The coordinator cannot change its own current model or reasoning setting: at a meaningful phase boundary it may recommend that the user switch, without interrupting active implementation merely to downgrade. The profile covers implementation lanes only; an optional listener still uses configured defaults unless the user separately chooses its settings.
 
@@ -92,10 +94,11 @@ Creating a remote repository or changing its visibility always requires explicit
 1. Resolve current thread capabilities by semantic operation (`list_projects`, `create_thread`, `list_threads`, `wait_threads`, `read_thread`, and `send_message_to_thread`) instead of assuming a fixed namespace or error string. If a required capability is unavailable after discovery, report the boundary.
 2. Call `list_projects` from the current entry point. Record the selected project's `projectId`, `projectKind`, `isGitRepository`, path when present, and `hostId` when present. Do not route a ChatGPT project through a Codex worktree flow.
 3. Create a task only under recorded `createTasks` authority. For a Git project, default to a native `worktree`; use the saved project directly only when the user explicitly requested that environment. For a non-Git project use `local`. Start a Git worktree from an existing integration or parent branch; never invent a missing starting ref.
-4. Pass the complete lane brief as the initial `create_thread` prompt and set the title in that call when supported. Pass model and reasoning overrides only for exact user pins, a recorded user-authorized adaptive profile, or a higher-priority applicable instruction; otherwise leave them unset. Leave the task unpinned unless the user requested pinning.
+4. Select and pass model and reasoning overrides from the default adaptive profile, exact user pins, or a higher-priority applicable instruction. Leave them unset only when the user explicitly requests configured defaults. Pass the complete lane brief as the initial `create_thread` prompt, set the title in that call when supported, and leave the task unpinned unless the user requested pinning.
 5. Include in the brief:
    - independent-main-task role, exact scope, owned files, and exclusions;
    - base branch and SHA, required source paths, tests, and known baseline failures;
+   - routing profile, risk classification, primary difficulty, selected model and reasoning effort, and the evidence for that selection;
    - required named branch and repository commit identity and message rules;
    - exactly which local and remote actions are authorized, with unauthorized actions prohibited;
    - no self-merge; the coordinator retains acceptance and merge authority;
