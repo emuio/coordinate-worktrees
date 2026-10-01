@@ -91,9 +91,11 @@ python3 "${CODEX_HOME:-$HOME/.codex}/skills/.system/skill-installer/scripts/inst
 
 风险要根据错误后果、权限边界、持久化状态、回滚质量和未解决歧义判断，不能只看任务大小。用户固定值、更高优先级规则或用户明确要求沿用配置默认时，才覆盖自适应流程。每个通道都记录风险、主要难点、模型、推理强度和选择理由。
 
-默认 `risk-based-adaptive` 配置中，机械、重复和高吞吐任务使用 Luna / medium；范围窄、要求明确的低风险实现使用 Terra / medium；普通生产实现与验证使用 Terra / high；主要难点是有边界的理解和判断时使用 Sol / medium；跨模块、架构、安全、协议、数据库、部署、复杂排障或最终集成验收等 elevated 风险使用 Sol / high；不可逆生产变更、租户隔离、可信数据丢失风险、弱回滚，或两轮修复仍暴露设计歧义的 critical 风险使用 Sol / xhigh。max 和 ultra 不会被自动选择。简化判断就是：难在理解用 Sol，难在执行用 Terra，难在吞吐用 Luna，风险决定最低推理档位。
+默认 `astra-first-adaptive` 配置使用 GPT-6 Astra（`gpt-6-astra`）：范围明确的实现、修复、常规测试与文档使用 medium；复杂设计、排障、集成判断或 elevated 风险使用 high；重大安全或数据风险、弱回滚、持续不收敛的设计问题使用 xhigh。推理难度与风险分别判断，不能仅因涉及数据库、部署或文件多就判为 critical。max 和 ultra 不会被自动选择。
 
-用户自报 Pro 20x 时，记录 `quality-biased-pro20x` 变体，但仍不应把所有 Terra 通道替换成 Sol。该配置建议主协调任务常态使用 Sol / high，仅在例外性的关键决策点使用 xhigh，在持续的确定性收口阶段可使用 medium。协调者会自动配置新建 App 任务，但不能自行改变当前协调任务的设置；需要调整时，只能在有意义的阶段边界建议用户手工切换。
+总协调推荐长期保持 Astra / high。只有明确的例外决策，或剩余工作进入较长的确定性阶段时，才建议用户手动调整；不要因短暂步骤或工具等待频繁切档，也不能未经客户端验证就承诺切换保留缓存。用户自报 Pro 20x 只记录为账户背景，不切换另一套路由策略。
+
+只有用户明确选择、更高优先级规则、明确要求节省成本或提高吞吐量，或核实目标主机不支持 Astra 时，才选择 Sol、Terra 或 Luna。Sol 是通用实现回退，回退要保留所需推理强度并记录依据。恢复任务时保留已有通道配置及来源，新默认用于新分派任务；可选 listener 仍沿用配置默认。完整规则见 [技能模型路由](skills/coordinate-worktrees/SKILL.md#choose-model-and-reasoning-settings)。
 
 跟踪进度时，协调者直接等待最多八个已经就绪的目标，并保留事件 cursor；实现任务始终是权威的 self-notifier。只有用户明确要求新增一个用户可见监听任务时，才创建独立 listener；它只是 best-effort 的只读 observer，不能成为通知、验收、合并或清理的所有者。只有需要完整记录或诊断细节时才使用 `read_thread`，并且不汇报没有变化的快照。
 

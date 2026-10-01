@@ -27,7 +27,7 @@ delivery:
     handoffs: []
   modelRouting:
     mode: adaptive-profile
-    profile: sol-first-adaptive
+    profile: astra-first-adaptive
     source: skill-default
     accountContext: null
   authority:
@@ -172,12 +172,13 @@ Use explicit empty values when a field is not applicable. Do not fabricate a `th
 ### Model routing
 
 - `delivery.modelRouting.mode` is `adaptive-profile` by default. Use `explicit-pins` for exact user-selected task settings and `configured-default` only when the user explicitly requests no task-level overrides. A higher-priority applicable instruction may replace any mode.
-- The default profile is `sol-first-adaptive`. `accountContext` is user-reported context such as `Pro 20x`, not a claim that the coordinator verified account entitlements and not a reason to switch profiles.
-- Model and reasoning sources are `inherited`, `configured-default`, `explicit-user-choice`, `skill-default-adaptive-profile`, or `higher-priority-policy`. Every adaptive selection records `routingRisk` (`routine`, `elevated`, or `critical`), `difficultySource` (`throughput`, `execution`, or `judgment`), and a concise `selectionReason`.
-- Adaptive implementation lanes use Sol by default. Classify risk from error consequences, authority boundaries, persistent state, rollback quality, unresolved ambiguity, and verification difficulty; task size alone is not a risk class. Routine work uses medium, elevated risk sets high as the minimum effort, and critical risk sets xhigh as the minimum. Never automatically select max or ultra.
-- Terra or Luna requires an exact user selection, a higher-priority policy, or an explicit user request prioritizing economy or high throughput. Without an exact model pin, Terra is limited to bounded implementation with reliable verification and Luna to repetitive, mechanical, high-volume work with deterministic checks; preserve the task's reasoning-effort floor.
-- Do not reuse the model or reasoning strength of the last manually created task as a routing source. On resume or coordinator handoff, preserve the recorded profile and per-lane selections, but reassess settings for newly scoped lanes and review-fix cycles.
-- A coordinator recommendation is not a self-applied setting change. The user changes the coordinator task's own model or reasoning strength; the coordinator applies the default adaptive profile only to new implementation App tasks and supported follow-up overrides.
+- The default profile is `astra-first-adaptive`. Follow the model/effort table in [the skill entrypoint](../SKILL.md#choose-model-and-reasoning-settings): Astra / medium for routine implementation, high for complex judgment or elevated risk, and xhigh for critical work. The stable coordinator recommendation is Astra / high.
+- `accountContext` records user-reported context such as Pro 20x, not verified entitlements or a separate profile.
+- Model and reasoning sources are `inherited`, `configured-default`, `explicit-user-choice`, `skill-default-adaptive-profile`, or `higher-priority-policy`. Every adaptive selection records `routingRisk` (`routine`, `elevated`, or `critical`), `difficultySource` (`throughput`, `execution`, or `judgment`), and a concise `selectionReason`. Store the exact supported model ID, for example `gpt-6-astra`.
+- Classify risk separately from reasoning difficulty. Higher difficulty may raise effort; task size or domain keywords alone do not set critical risk. Preserve the entrypoint's risk floors and do not automatically select max or ultra.
+- Record user economy/high-throughput instructions, explicit model choices, higher-priority policy, or verified destination-host unavailability when selecting Sol, Terra, or Luna. Availability fallback remains `skill-default-adaptive-profile` with capability evidence in `selectionReason`.
+- On resume or coordinator handoff, preserve recorded profiles and lane settings with their original provenance. Apply the new default to newly dispatched lanes; reassess existing lanes only for a material scope/risk change or review-fix cycle. Never copy the last manually launched task's settings or rewrite historical selections.
+- Coordinator recommendations are user-applied, not self-applied. Keep Astra / high stable through ordinary phase transitions and avoid frequent switching suggestions for brief steps. Listener defaults are independent.
 
 ### Task lifecycle
 
