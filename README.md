@@ -49,13 +49,20 @@ Typical requests include:
 
 ## Routing model
 
-| Work | Execution surface | Git ownership |
+| Work | Execution surface | Ownership and isolation |
 | --- | --- | --- |
-| Read-only investigation or independent review | Short-lived collaboration subagent | None |
-| Explicitly requested, persistent multi-lane implementation | Codex App task in a native worktree | Dedicated branch; PR/MR only when authorized |
-| Tightly coupled edits to the same files or state | One sequential lane | One owner |
+| One-time investigation, message/evidence check, or independent review | Collaboration subagent | Read-only shared filesystem |
+| One-time test, documentation, or bounded edit | Scoped collaboration subagent | Authorized paths and exclusive owned files |
+| Sustained implementation with independent commits and delivery | Explicitly requested or already authorized Codex App task | Independent worktree and branch |
+| Integration across stages or days, with separate recovery or handoff | Explicitly requested or already authorized persistent App task | Read-only work may be projectless; no branch needed for duration alone |
+| Explicitly requested external-message intake or routing, such as DWS | Dedicated App task and existing or authorized event backend | Separate task, backend, and message-routing authority |
+| Coupled edits to the same files or state | One sequential owner | Reuse the existing owner |
+
+Within an authorized coordination delivery, reuse the current owner first, then choose the surface by whether the assignment has a bounded result or needs ongoing independent ownership. Record the choice, reason, scope, owned paths, and completion condition or checkpoint. Select model and reasoning separately; this routing does not expand the skill to ordinary standalone subagent work. External-message intake is distinct from the optional child-task status observer.
 
 The coordinator owns the delivery graph, integration state, review decisions, and any authorized final merge. Each implementation lane owns its branch, commits, checks, and review fixes, but does not merge itself.
+
+Keep the coordinator available by delegating lengthy implementation, tests, integration, and external waiting within existing authority. Retain requirements, dispatch, evidence review, acceptance, and necessary short or serialized checks in the coordinator. Preserve each unfinished item's owner and checkpoint, process correlated notices at meaningful checkpoints, and use bounded event-driven waits when no other authorized work can advance. See [the coordinator protocol](skills/coordinate-worktrees/references/coordinator-control-plane.md).
 
 New App tasks remain unpinned by default. Pin a task only when the user explicitly requests it; coordination relies on the ledger, task handle, branch, and PR or MR rather than sidebar order.
 

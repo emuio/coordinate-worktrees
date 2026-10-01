@@ -9,15 +9,20 @@ Operate one coordinator over several isolated delivery lanes. Keep durable owner
 
 ## Route the work
 
-Choose the execution surface before dispatching:
+Within an already authorized coordination delivery, choose the execution surface by ownership and continuity. This routing does not make the skill mandatory for ordinary subagent tasks outside its stated scope.
 
-| Work | Surface | Git ownership |
+| Work | Surface | Ownership and isolation |
 | --- | --- | --- |
-| Read-only investigation, mapping, or independent review | Collaboration subagent | None; shared filesystem |
-| Explicitly requested, persistent multi-lane implementation | Codex App tasks in native worktrees | One branch per lane; remote review only when authorized |
-| Tightly coupled edits to the same files or mutable state | One lane, sequentially | One owner |
+| One-time group-message, evidence, source, or protocol check; independent review | Collaboration subagent | Read-only; shared filesystem, no Git isolation |
+| One-time test, documentation, or bounded edit with explicit file ownership | Scoped collaboration subagent | Coordinator-selected, authorized paths; exclusive owned files; no automatic worktree creation |
+| Sustained development across multiple turns, with independent branch commits and delivery | Explicitly requested or already authorized Codex App task | Independent worktree for code changes; one branch per lane |
+| Full integration across stages or days, needing a fixed owner, durable records, and separate resume or handoff | Explicitly requested or already authorized persistent Codex App task | Read-only work may use a projectless task referencing existing read-only paths; duration alone does not require a branch or worktree |
+| Explicitly requested long-term external-message intake or routing (for example DWS) | Dedicated Codex App task plus an existing or authorized event backend | Explicit authority for the task, event backend, and message routing; no continuously waiting subagent |
+| Coupled edits to the same files or mutable state | One owner, sequentially | Reuse the owner; no overlapping writers |
 
-Use collaboration subagents only for independent work that cannot create shared-filesystem edit conflicts. Do not create a user-visible App task unless the user explicitly requested a new task or a multi-task delivery. That authorization covers task creation only; it does not authorize push, review creation, merge, deployment, archive, branch deletion, or worktree removal.
+Reuse the existing owner first; distinguish a bounded result from ongoing independent responsibility, verify file ownership, isolation, and authority, then select the surface. Choose model and effort separately under the existing routing policy and user pins. Duration, model level, or file count alone is not a surface-selection rule. See [execution surface selection](references/coordinator-control-plane.md#execution-surface-selection) for brief fields and integration/listener boundaries.
+
+Use collaboration subagents only where explicit scope prevents shared-filesystem conflicts. Do not create a user-visible App task unless the user explicitly requested a new task or multi-task delivery, or an existing explicit authorization covers it. Task creation does not authorize a listener, message delivery, push, review creation, merge, deployment, archive, branch deletion, or worktree removal. Reuse does not permit migrating or interrupting an active task merely to change its surface.
 
 ## Record action authority
 
@@ -37,6 +42,8 @@ Record separate authority for `createTasks`, `createListener`, `pushBranches`, `
 A coordinator is the task registered as the control plane for one repository and delivery graph; it is not a hidden Codex task type. Use one coordinator per delivery graph unless release authority is genuinely independent. The coordinator owns partitioning, the ledger, steering, acceptance, merge decisions, authorized deployment, base synchronization, and lane retirement. It does not patch a delegated lane unless ownership is explicitly transferred with a recorded reason and scope.
 
 Before dispatching or resuming lanes, read [the delivery ledger schema](references/delivery-ledger.md). Record a `ledgerLocation`; default to a complete checkpoint in the coordinator task unless the user authorizes a repository or external state file. Project association and searchable titles aid discovery, but the ledger, branch, and PR or MR remain the ownership record.
+
+Within existing authority, keep the coordinator available by delegating implementation and lengthy execution or external waiting to the owning lane or an existing event mechanism. Keep requirement decisions, dispatch, evidence review, acceptance, and necessary short or serialized checks in the coordinator. Follow [the availability protocol](references/coordinator-control-plane.md#keep-coordinator-available); delegation does not guarantee immediate notice delivery to a busy coordinator.
 
 When new user messages arrive while commitments remain active, follow [the coordinator message and commitment protocol](references/coordinator-control-plane.md).
 
