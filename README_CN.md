@@ -98,11 +98,13 @@ python3 "${CODEX_HOME:-$HOME/.codex}/skills/.system/skill-installer/scripts/inst
 
 风险要根据错误后果、权限边界、持久化状态、回滚质量和未解决歧义判断，不能只看任务大小。用户固定值、更高优先级规则或用户明确要求沿用配置默认时，才覆盖自适应流程。每个通道都记录风险、主要难点、模型、推理强度和选择理由。
 
-默认 `astra-first-adaptive` 配置使用 GPT-6 Astra（`gpt-6-astra`）：范围明确的实现、修复、常规测试与文档使用 medium；复杂设计、排障、集成判断或 elevated 风险使用 high；重大安全或数据风险、弱回滚、持续不收敛的设计问题使用 xhigh。推理难度与风险分别判断，不能仅因涉及数据库、部署或文件多就判为 critical。max 和 ultra 不会被自动选择。
+默认 `sol-6.1-first-adaptive` 配置：范围明确的实现、修复、常规测试与文档使用 GPT-6.1 Sol（`gpt-6.1-sol`）/ medium；复杂设计、排障、集成判断或 elevated 风险使用 GPT-6.1 Sol / high；重大安全或数据风险、弱回滚、持续不收敛的设计问题使用 GPT-6 Astra（`gpt-6-astra`）/ xhigh。推理难度与风险分别判断，不能仅因涉及数据库、部署或文件多就判为 critical。max 和 ultra 不会被自动选择。
 
-总协调推荐长期保持 Astra / high。只有明确的例外决策，或剩余工作进入较长的确定性阶段时，才建议用户手动调整；不要因短暂步骤或工具等待频繁切档，也不能未经客户端验证就承诺切换保留缓存。用户自报 Pro 20x 只记录为账户背景，不切换另一套路由策略。
+总协调推荐长期保持 GPT-6.1 Sol / high；遇到明确的重大风险决策或持续不收敛时，才建议用户手动切到 Astra / xhigh。只有剩余工作进入较长的确定性阶段时才建议 medium，不因短暂步骤或工具等待频繁切档，也不能未经客户端验证就承诺切换保留缓存。用户自报 Pro 20x 只记录为账户背景，不切换另一套路由策略。
 
-只有用户明确选择、更高优先级规则、明确要求节省成本或提高吞吐量，或核实目标主机不支持 Astra 时，才选择 Sol、Terra 或 Luna。Sol 是通用实现回退，回退要保留所需推理强度并记录依据。恢复任务时保留已有通道配置及来源，新默认用于新分派任务；可选 listener 仍沿用配置默认。完整规则见 [技能模型路由](skills/coordinate-worktrees/SKILL.md#choose-model-and-reasoning-settings)。
+核实目标主机支持情况，并记录精确模型 ID。GPT-6.1 Sol 不可用时，使用满足所需推理强度的 Astra；重大风险任务的 Astra 不可用时，使用 GPT-6.1 Sol / xhigh。其他模型选择需要用户明确选择、更高优先级规则，或明确要求节省成本或提高吞吐量。恢复任务时保留已有通道配置及来源，新默认用于新分派任务；可选 listener 仍沿用配置默认。完整规则见 [技能模型路由](skills/coordinate-worktrees/SKILL.md#choose-model-and-reasoning-settings)。
+
+在日常交付中观察结果质量、评审返工和明显等待，把实际问题记录在现有通道报告中，再调整对应任务类型。这是供实际使用检验的默认策略，尚不代表已验证的性能提升。
 
 跟踪进度时，协调者直接等待最多八个已经就绪的目标，并保留事件 cursor；实现任务始终是权威的 self-notifier。只有用户明确要求新增一个用户可见监听任务时，才创建独立 listener；它只是 best-effort 的只读 observer，不能成为通知、验收、合并或清理的所有者。只有需要完整记录或诊断细节时才使用 `read_thread`，并且不汇报没有变化的快照。
 

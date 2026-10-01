@@ -27,7 +27,7 @@ delivery:
     handoffs: []
   modelRouting:
     mode: adaptive-profile
-    profile: astra-first-adaptive
+    profile: sol-6.1-first-adaptive
     source: skill-default
     accountContext: null
   authority:
@@ -172,13 +172,13 @@ Use explicit empty values when a field is not applicable. Do not fabricate a `th
 ### Model routing
 
 - `delivery.modelRouting.mode` is `adaptive-profile` by default. Use `explicit-pins` for exact user-selected task settings and `configured-default` only when the user explicitly requests no task-level overrides. A higher-priority applicable instruction may replace any mode.
-- The default profile is `astra-first-adaptive`. Follow the model/effort table in [the skill entrypoint](../SKILL.md#choose-model-and-reasoning-settings): Astra / medium for routine implementation, high for complex judgment or elevated risk, and xhigh for critical work. The stable coordinator recommendation is Astra / high.
+- The default profile is `sol-6.1-first-adaptive`. Follow the model/effort table in [the skill entrypoint](../SKILL.md#choose-model-and-reasoning-settings): GPT-6.1 Sol / medium for routine implementation, GPT-6.1 Sol / high for complex judgment or elevated risk, and GPT-6 Astra / xhigh for critical work. The stable coordinator recommendation is GPT-6.1 Sol / high.
 - `accountContext` records user-reported context such as Pro 20x, not verified entitlements or a separate profile.
-- Model and reasoning sources are `inherited`, `configured-default`, `explicit-user-choice`, `skill-default-adaptive-profile`, or `higher-priority-policy`. Every adaptive selection records `routingRisk` (`routine`, `elevated`, or `critical`), `difficultySource` (`throughput`, `execution`, or `judgment`), and a concise `selectionReason`. Store the exact supported model ID, for example `gpt-6-astra`.
+- Model and reasoning sources are `inherited`, `configured-default`, `explicit-user-choice`, `skill-default-adaptive-profile`, or `higher-priority-policy`. Every adaptive selection records `routingRisk` (`routine`, `elevated`, or `critical`), `difficultySource` (`throughput`, `execution`, or `judgment`), and a concise `selectionReason`. Store the exact supported model ID, such as `gpt-6.1-sol` or `gpt-6-astra`; a family label such as Sol is insufficient.
 - Classify risk separately from reasoning difficulty. Higher difficulty may raise effort; task size or domain keywords alone do not set critical risk. Preserve the entrypoint's risk floors and do not automatically select max or ultra.
-- Record user economy/high-throughput instructions, explicit model choices, higher-priority policy, or verified destination-host unavailability when selecting Sol, Terra, or Luna. Availability fallback remains `skill-default-adaptive-profile` with capability evidence in `selectionReason`.
+- Record user economy/high-throughput instructions, explicit model choices, or higher-priority policy for model choices outside the profile. Availability fallback between GPT-6.1 Sol and Astra remains `skill-default-adaptive-profile` with capability evidence in `selectionReason`; preserve the required effort.
 - On resume or coordinator handoff, preserve recorded profiles and lane settings with their original provenance. Apply the new default to newly dispatched lanes; reassess existing lanes only for a material scope/risk change or review-fix cycle. Never copy the last manually launched task's settings or rewrite historical selections.
-- Coordinator recommendations are user-applied, not self-applied. Keep Astra / high stable through ordinary phase transitions and avoid frequent switching suggestions for brief steps. Listener defaults are independent.
+- Coordinator recommendations are user-applied, not self-applied. Keep GPT-6.1 Sol / high stable through ordinary phase transitions and avoid frequent switching suggestions for brief steps. Listener defaults are independent. Usage feedback belongs in the existing reports and selection rationale; it does not rewrite historical profile or model records.
 
 ### Task lifecycle
 

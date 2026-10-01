@@ -65,25 +65,27 @@ Use only a registered coordinator-owned or explicitly selected base checkout. Be
 ## Choose model and reasoning settings
 
 - A full-history collaboration subagent inherits the parent task's current model and reasoning effort.
-- New implementation App tasks use `astra-first-adaptive`: GPT-6 Astra (`gpt-6-astra`) with medium effort by default. They do not inherit the coordinator's transient settings or the last manually launched task's settings.
+- New implementation App tasks use `sol-6.1-first-adaptive`: GPT-6.1 Sol (`gpt-6.1-sol`) with medium effort by default, with Astra reserved for critical work as below. They do not inherit the coordinator's transient settings or the last manually launched task's settings.
 - Exact user pins, a higher-priority instruction, or an explicit request to use configured defaults overrides adaptive routing. Model selection grants no additional action authority.
-- Validate model and effort against the destination host's current task-creation capability. If Astra is unavailable, record that evidence and select a supported Sol configuration at the same required effort. If no suitable configuration is available, report the mismatch and obtain a supported choice; never silently downgrade.
+- Validate model and effort against the destination host's current task-creation capability. If GPT-6.1 Sol is unavailable, use supported GPT-6 Astra at the required effort; if Astra is unavailable for a critical lane, use supported GPT-6.1 Sol / xhigh. Record availability evidence and the exact fallback model ID. If neither supports the required effort, report the mismatch and obtain a supported choice; never silently downgrade or substitute an older Sol version.
 
 Assess reasoning difficulty separately from risk. Record `routingRisk` from error consequences, authority boundaries, blast radius, persistence, and rollback quality; record `difficultySource` and explain uncertainty and verification difficulty in `selectionReason`. More files or a mention of databases, deployment, security, or final review does not alone make a task critical.
 
 | Task shape | New implementation task |
 | --- | --- |
-| Clear, bounded implementation, ordinary UI/CRUD, small fixes, mechanical audits, routine tests or documentation with reliable checks | Astra / medium |
-| Complex multi-module design, difficult diagnosis, ambiguous requirements, or demanding integration judgment; elevated risk | Astra / high |
-| Major security or data-loss risk, weak rollback, consequential architecture disputes, or repeated repair failures that expose unresolved design ambiguity | Astra / xhigh |
+| Clear, bounded implementation, ordinary UI/CRUD, small fixes, mechanical audits, routine tests or documentation with reliable checks | GPT-6.1 Sol / medium |
+| Complex multi-module design, difficult diagnosis, ambiguous requirements, or demanding integration judgment; elevated risk | GPT-6.1 Sol / high |
+| Major security or data-loss risk, weak rollback, consequential architecture disputes, or repeated repair failures that expose unresolved design ambiguity | GPT-6 Astra / xhigh |
 
-Reasoning difficulty may raise effort above the risk floor. Elevated risk requires at least high; critical risk requires at least xhigh, even for a small patch. Do not automatically select max or ultra. These are workflow defaults, not a claim that effort labels are equivalent across models or that Astra is always faster or cheaper.
+Reasoning difficulty may raise effort above the risk floor. Elevated risk requires at least high; critical risk requires at least xhigh, even for a small patch. Do not automatically select max or ultra. These are workflow defaults, not a claim that effort labels are equivalent across models or that a model is always faster or cheaper.
 
-Use Sol, Terra, or Luna only for explicit user choice, higher-priority policy, a user-requested economy/high-throughput tradeoff, or verified Astra unavailability. Sol is the general implementation fallback; Terra suits bounded implementation with reliable verification, and Luna suits repetitive mechanical work with deterministic checks. Preserve the risk floor and record the reason and source for the exception. User-reported Pro 20x is account context, not a separate profile or proof of available quota.
+Other model choices require explicit user choice, higher-priority policy, or a user-requested economy/high-throughput tradeoff. Terra suits bounded implementation with reliable verification, and Luna suits repetitive mechanical work with deterministic checks. Preserve the risk floor and record the reason, source, and exact model ID for the exception. User-reported Pro 20x is account context, not a separate profile or proof of available quota.
 
 Record the profile, risk, difficulty source, exact model, effort, and task-specific rationale before dispatch. Reassess at material scope/risk changes and before review-fix follow-ups; do not interrupt active work merely to reconfigure it. Preserve existing lane settings and their provenance on resume; use the new default for newly dispatched lanes rather than silently rewriting historical records.
 
-For the coordinator itself, recommend Astra / high as the stable setting across normal coordination, review, and delivery reconciliation. Suggest a user-applied switch to xhigh only for concrete exceptional decisions or sustained non-convergence, and to medium only when a substantial remaining phase is deterministic. Do not prompt for repeated switches around brief simple steps, tool waits, or routine checkpoints. The coordinator cannot change its own settings, and must not promise cache preservation from an App UI switch without verified client evidence. An optional listener still uses configured defaults unless the user separately chooses its settings.
+For the coordinator itself, recommend GPT-6.1 Sol / high as the stable setting across normal coordination, review, and delivery reconciliation. Suggest a user-applied switch to GPT-6 Astra / xhigh only for concrete critical decisions or sustained non-convergence, and to medium only when a substantial remaining phase is deterministic. Do not prompt for repeated switches around brief simple steps, tool waits, or routine checkpoints. The coordinator cannot change its own settings, and must not promise cache preservation from an App UI switch without verified client evidence. An optional listener still uses configured defaults unless the user separately chooses its settings.
+
+Evaluate this profile through ordinary usage. Use the existing lane reports and selection reasons to record observed quality problems, review rework, or material delays with the exact model, effort, and task scope. Adjust the affected task class when feedback supports a change; do not claim this profile is a validated performance improvement or raise every lane's effort after one failure.
 
 ## Establish the delivery graph
 

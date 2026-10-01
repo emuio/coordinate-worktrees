@@ -226,21 +226,21 @@ Forbidden decisions:
 
 Required evidence: source and destination coordinator addresses, source and inherited lane IDs, per-active-lane routing update, per-terminal-lane reconciliation, preserved receipts, and handoff state.
 
-## 13. Default Astra-first adaptive routing
+## 13. Default GPT-6.1 Sol-first adaptive routing
 
 Prompt: "Use `$coordinate-worktrees` to create three implementation tasks: one is a repetitive catalog audit, one is a clear production UI implementation, and one changes cross-module authentication and database mappings. I use Pro 20x. Keep coordinating and reviewing here."
 
 Expected decisions:
 
-- Apply adaptive routing without asking the user to choose task settings. Record `modelRouting.mode=adaptive-profile`, `profile=astra-first-adaptive`, `source=skill-default`, and the user-reported account context.
-- Select Astra / medium for the repetitive low-risk audit and clear production UI implementation. Assess the authentication/database lane from its actual consequences and ambiguity: use high for bounded complex integration and xhigh for critical security or data-loss risk; do not infer critical risk from domain keywords alone.
+- Apply adaptive routing without asking the user to choose task settings. Record `modelRouting.mode=adaptive-profile`, `profile=sol-6.1-first-adaptive`, `source=skill-default`, and the user-reported account context.
+- Select GPT-6.1 Sol / medium for the repetitive low-risk audit and clear production UI implementation. Assess the authentication/database lane from its actual consequences and ambiguity: use GPT-6.1 Sol / high for bounded complex integration and Astra / xhigh for critical security or data-loss risk; do not infer critical risk from domain keywords alone.
 - Record `source=skill-default-adaptive-profile`, `routingRisk`, `difficultySource`, and a task-specific `selectionReason` for every override.
-- Recommend Astra / high for the coordinator if its current setting is mismatched, but leave the current coordinator setting unchanged and continue authorized work.
+- Recommend GPT-6.1 Sol / high for the coordinator if its current setting is mismatched, but leave the current coordinator setting unchanged and continue authorized work.
 - Reassess a lane after a material scope or risk change and before a follow-up turn instead of carrying forward its original choice mechanically.
 
 Forbidden decisions:
 
-- Selecting Sol, Terra, or Luna merely to reduce cost or latency when the user did not explicitly prioritize that tradeoff.
+- Selecting older Sol versions, Terra, or Luna merely to reduce cost or latency when the user did not explicitly prioritize that tradeoff, or recording only Sol without an exact model ID.
 - Applying Astra / xhigh to every lane, or treating xhigh as a default quality switch.
 - Automatically selecting max or ultra.
 - Copying the model or reasoning strength from the last manually launched task.
@@ -253,9 +253,9 @@ Variants:
 - A lane performs an irreversible production mutation affecting tenant isolation with weak rollback. Classify it `critical` and use Astra / xhigh even if the patch is small.
 - Two review/fix cycles fail and expose unresolved design ambiguity. Reclassify the follow-up as `critical`; do not interrupt a currently running turn solely to change settings.
 - When the user explicitly prioritizes economy or high throughput without pinning an exact model, Terra may handle bounded implementation with reliable verification and Luna may handle repetitive mechanical work with deterministic checks; preserve the risk-based effort floor and record the exception source.
-- If the destination host does not support Astra, record capability evidence and choose supported Sol at the required effort. If neither is suitable, report the capability gap rather than silently downgrading.
-- Keep the coordinator on Astra / high during a short test run or ledger update; do not request a temporary drop to medium or claim UI switching preserves the cache.
-- On resume, retain an existing Sol lane and its recorded profile; apply Astra defaults to a newly dispatched lane.
+- If the destination host does not support GPT-6.1 Sol, record capability evidence and use Astra at the required effort. If Astra is unavailable for critical work, use supported GPT-6.1 Sol / xhigh. If neither is suitable, report the capability gap rather than silently downgrading.
+- Keep the coordinator on GPT-6.1 Sol / high during a short test run or ledger update; do not request a temporary drop to medium or claim UI switching preserves the cache.
+- On resume, retain an existing Astra lane and its recorded profile; apply GPT-6.1 Sol defaults to a newly dispatched routine lane.
 - When the user explicitly requests configured defaults, set `modelRouting.mode=configured-default` and omit App task model and reasoning overrides. Exact user pins instead use `explicit-pins`.
 
 ## Final reconciliation without deployment
