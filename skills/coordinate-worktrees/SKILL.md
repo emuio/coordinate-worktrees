@@ -142,6 +142,8 @@ Serialize the complete current ledger to JSON and run [`scripts/validate_ledger.
 
 After deployment, prove the exact deployed target and immutable release identifier, then verify each included lane through its `acceptedHead`, `integratedCommit`, `deployedTarget`, `deployedRelease`, and deployment evidence. Run every included lane's retirement checkpoint, including lanes merged in an earlier turn, and run the validator again with `--phase post-deploy` before the final report. A deployed lane must have a verified retirement disposition or a precise blocker. `retirementPolicy` is a coordinator instruction, not an App automation trigger: archive requires `archiveTasks` authority, an explicit archive call, and a read-back classification of archived or `app-cleanup-pending`.
 
+Before the final report, run the same validator with `--phase final` against the complete ledger, even when no deployment was requested. Follow the retirement reference's reconciliation table after each merge/deployment and at final reporting. This checks documented disposition rather than requiring every worktree to disappear. For reimplemented lanes, record the ledger's replacement evidence before treating the old branch as superseded.
+
 ## Guardrails
 
 - Preserve the user's Git identity and repository-specific commit rules; never add AI or bot attribution unless requested.

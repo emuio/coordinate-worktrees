@@ -71,7 +71,9 @@ def _settled_before(lane: dict[str, Any], batch_id: str) -> bool:
         record = _mapping(raw_record)
         if record.get("batchId") == batch_id:
             continue
-        same_head = not _present(current_head) or record.get("acceptedHead") == current_head
+        same_head = (
+            not _present(current_head) or record.get("acceptedHead") == current_head
+        )
         if (
             record.get("releaseDisposition") == "include"
             and record.get("deploymentVerified") is True
@@ -85,6 +87,216 @@ def _settled_before(lane: dict[str, Any], batch_id: str) -> bool:
         ):
             return True
     return False
+
+
+def _validate_retirement(lane, archive_authority, add, missing_code):
+    lane_id = str(lane.get("id"))
+    retirement = _mapping(lane.get("retirement"))
+    retirement_disposition = retirement.get("disposition")
+    if retirement_disposition not in RETIREMENT_STATUS:
+        add(
+            missing_code,
+            f"lanes[{lane_id}].retirement.disposition",
+            "reconciled lane requires a recognized retirement disposition",
+        )
+    else:
+        expected_status = RETIREMENT_STATUS[retirement_disposition]
+        if lane.get("status") != expected_status:
+            add(
+                "retirement-status-mismatch",
+                f"lanes[{lane_id}].status",
+                f"{retirement_disposition} requires lane status {expected_status}",
+            )
+        if retirement_disposition in BLOCKED_RETIREMENT and not _present(
+            retirement.get("blockerReason")
+        ):
+            add(
+                "missing-retirement-blocker",
+                f"lanes[{lane_id}].retirement.blockerReason",
+                f"{retirement_disposition} requires a precise blocker",
+            )
+
+    placement = _mapping(lane.get("placement"))
+    policy = placement.get("retirementPolicy")
+    task = _mapping(lane.get("task"))
+    if isinstance(policy, str) and policy.startswith("archive-app-task"):
+        archive_state = task.get("archiveState")
+        if archive_authority.get("state") == "authorized":
+            if archive_state not in {
+                "requested",
+                "archived",
+                "verification-failed",
+            } and not (
+                retirement_disposition in BLOCKED_RETIREMENT
+                and _present(retirement.get("blockerReason"))
+            ):
+                add(
+                    "archive-policy-not-executed",
+                    f"lanes[{lane_id}].task.archiveState",
+                    "archive policy is not automation; authorized archive was not requested",
+                )
+        elif not _present(retirement.get("blockerReason")):
+            add(
+                "archive-authority-unresolved",
+                f"lanes[{lane_id}].retirement.blockerReason",
+                "archive policy lacks authority and an explicit blocker",
+            )
+
+    if retirement_disposition == "app-cleanup-pending" and task.get(
+        "archiveState"
+    ) not in {"requested", "archived", "verification-failed"}:
+        add(
+            "cleanup-pending-without-archive-request",
+            f"lanes[{lane_id}].task.archiveState",
+            "app-cleanup-pending requires an archive request or failed read-back",
+        )
+    path = f"lanes[{lane_id}].retirement"
+    if not _sequence(retirement.get("evidence")):
+        add(
+            "missing-retirement-evidence",
+            path,
+            "record current task and worktree read-back evidence",
+        )
+    if not _present(retirement.get("nextAction")):
+        add(
+            "missing-retirement-next-action",
+            path,
+            "record next action or explicit none",
+        )
+    path_state = placement.get("pathState")
+    if path_state not in {"current", "historical", "unknown"}:
+        add(
+            "invalid-path-state",
+            path,
+            "record current, historical, or unknown path state",
+        )
+    if path_state == "unknown" and not _present(retirement.get("blockerReason")):
+        add(
+            "unknown-path-without-blocker",
+            path,
+            "unknown path requires a precise blocker",
+        )
+    if path_state in {"current", "historical"} and not (
+        isinstance(placement.get("path"), str) and placement["path"].startswith("/")
+    ):
+        add(
+            "missing-worktree-path", path, "current or historical path must be absolute"
+        )
+    kind = placement.get("worktreeKind")
+    expected_kind = {
+        "manual-retired": "coordinator-manual",
+        "app-auto-cleaned-restorable": "codex-managed",
+        "app-cleanup-pending": "codex-managed",
+        "permanent-retained": "permanent",
+    }.get(retirement_disposition)
+    if expected_kind and kind != expected_kind:
+        add("retirement-kind-mismatch", path, f"disposition requires {expected_kind}")
+    if (
+        retirement_disposition in {"manual-retired", "app-auto-cleaned-restorable"}
+        and path_state != "historical"
+    ):
+        add(
+            "retired-path-not-historical",
+            path,
+            "removed worktree requires historical path",
+        )
+    if retirement_disposition == "app-auto-cleaned-restorable" and (
+        task.get("archiveState") != "archived"
+        or retirement.get("snapshotState") != "preserved"
+    ):
+        add(
+            "app-cleanup-not-verified",
+            path,
+            "require verified archive and preserved snapshot",
+        )
+    if retirement_disposition == "manual-retired" and not _present(
+        retirement.get("recoveryRef")
+    ):
+        add(
+            "missing-recovery-ref",
+            path,
+            "manual retirement requires a recoverable source HEAD",
+        )
+    if retirement_disposition == "permanent-retained" and path_state != "current":
+        add(
+            "permanent-path-not-current",
+            path,
+            "retained permanent worktree requires current path",
+        )
+
+
+def _validate_replacements(lanes, add):
+    by_id = {str(lane.get("id")): lane for lane in lanes}
+    for lane in lanes:
+        replacement = _mapping(lane.get("replacement"))
+        if not replacement:
+            continue
+        path = f"lanes[{lane.get('id')}].replacement"
+        target_id = replacement.get("supersededBy")
+        target = by_id.get(str(target_id))
+        if not target or str(target_id) == str(lane.get("id")):
+            add(
+                "invalid-replacement-target",
+                path,
+                "replacement must reference another lane",
+            )
+            continue
+        seen = {str(lane.get("id"))}
+        cursor = str(target_id)
+        while cursor in by_id:
+            if cursor in seen:
+                add("replacement-cycle", path, "replacement chain must be acyclic")
+                break
+            seen.add(cursor)
+            cursor = str(_mapping(by_id[cursor].get("replacement")).get("supersededBy"))
+        if replacement.get("kind") not in {
+            "patch-equivalent",
+            "functional-replacement",
+        }:
+            add(
+                "invalid-replacement-kind",
+                path,
+                "distinguish patch equivalence from functional replacement",
+            )
+        for field in ("reason", "sourceHead", "replacementHead"):
+            if not _present(replacement.get(field)):
+                add(
+                    "missing-replacement-field",
+                    path + "." + field,
+                    "replacement field is required",
+                )
+        for field in ("scopeEvidence", "acceptanceEvidence"):
+            if not _sequence(replacement.get(field)):
+                add(
+                    "missing-replacement-evidence",
+                    path + "." + field,
+                    "replacement evidence is required",
+                )
+        if replacement.get("sourceHead") != _mapping(lane.get("git")).get("head"):
+            add(
+                "replacement-source-head-mismatch",
+                path,
+                "replacement evidence must bind the old source HEAD",
+            )
+        acceptance = _mapping(target.get("acceptance"))
+        if (
+            acceptance.get("state") != "accepted"
+            or not _sequence(acceptance.get("evidence"))
+            or replacement.get("replacementHead") != acceptance.get("acceptedHead")
+            or replacement.get("replacementHead")
+            != _mapping(target.get("git")).get("head")
+        ):
+            add(
+                "replacement-not-accepted",
+                path,
+                "replacement HEAD must match current accepted target HEAD",
+            )
+        if not _present(_mapping(lane.get("retirement")).get("recoveryRef")):
+            add(
+                "missing-replacement-recovery-ref",
+                path,
+                "preserve old source HEAD on a recoverable ref",
+            )
 
 
 def validate_ledger(
@@ -145,7 +357,10 @@ def validate_ledger(
                     "nonterminal target does not route to the current coordinator",
                 )
 
-        if task.get("lifecycle") == "terminal" and lane.get("status") not in RECONCILABLE_STATUSES:
+        if (
+            task.get("lifecycle") == "terminal"
+            and lane.get("status") not in RECONCILABLE_STATUSES
+        ):
             add(
                 "terminal-lane-unreconciled",
                 f"lanes[{lane_id}].status",
@@ -164,9 +379,7 @@ def validate_ledger(
         nonterminal_ids = {
             str(item) for item in _sequence(handoff.get("nonterminalLaneIds"))
         }
-        terminal_ids = {
-            str(item) for item in _sequence(handoff.get("terminalLaneIds"))
-        }
+        terminal_ids = {str(item) for item in _sequence(handoff.get("terminalLaneIds"))}
         routing_ids = {
             str(_mapping(item).get("laneId"))
             for item in _sequence(handoff.get("routingUpdates"))
@@ -189,7 +402,10 @@ def validate_ledger(
                 handoff_path,
                 "sourceLaneIds and inheritedLaneIds differ",
             )
-        if source_ids != nonterminal_ids | terminal_ids or nonterminal_ids & terminal_ids:
+        if (
+            source_ids != nonterminal_ids | terminal_ids
+            or nonterminal_ids & terminal_ids
+        ):
             add(
                 "coordinator-handoff-partition-mismatch",
                 handoff_path,
@@ -213,6 +429,23 @@ def validate_ledger(
                 f"{handoff_path}.terminalReconciliations",
                 "every terminal source lane needs acceptance/release/retirement reconciliation",
             )
+
+    _validate_replacements(lanes, add)
+    if phase == "final":
+        archive_authority = _mapping(
+            _mapping(delivery.get("authority")).get("archiveTasks")
+        )
+        for lane in lanes:
+            task = _mapping(lane.get("task"))
+            if (
+                lane.get("status") in RECONCILABLE_STATUSES
+                or task.get("lifecycle") in {"terminal", "archived"}
+                or _mapping(lane.get("replacement"))
+            ):
+                _validate_retirement(
+                    lane, archive_authority, add, "lane-missing-retirement"
+                )
+        return sorted(issues)
 
     release = _mapping(delivery.get("release"))
     batch_id = requested_batch_id or release.get("activeBatchId")
@@ -239,7 +472,11 @@ def validate_ledger(
     batch = batches[0]
     batch_path = f"delivery.release.batches[{batch_id}]"
     if not _present(batch.get("target")):
-        add("missing-release-target", f"{batch_path}.target", "release target is required")
+        add(
+            "missing-release-target",
+            f"{batch_path}.target",
+            "release target is required",
+        )
     if batch.get("status") not in RELEASE_STATUSES:
         add(
             "invalid-release-status",
@@ -325,7 +562,11 @@ def validate_ledger(
                     f"lanes[{lane_id}].acceptance.evidence",
                     f"{disposition} requires acceptance evidence",
                 )
-            if _present(git_head) and _present(accepted_head) and git_head != accepted_head:
+            if (
+                _present(git_head)
+                and _present(accepted_head)
+                and git_head != accepted_head
+            ):
                 add(
                     "lane-head-changed-after-acceptance",
                     f"lanes[{lane_id}].git.head",
@@ -337,7 +578,9 @@ def validate_ledger(
                     f"{record_path}.acceptedHead",
                     f"{disposition} requires acceptedHead",
                 )
-            elif _present(accepted_head) and record.get("acceptedHead") != accepted_head:
+            elif (
+                _present(accepted_head) and record.get("acceptedHead") != accepted_head
+            ):
                 add(
                     "accepted-head-mismatch",
                     f"{record_path}.acceptedHead",
@@ -391,7 +634,9 @@ def validate_ledger(
                 "batch deployment must be verified from current evidence",
             )
 
-        archive_authority = _mapping(_mapping(delivery.get("authority")).get("archiveTasks"))
+        archive_authority = _mapping(
+            _mapping(delivery.get("authority")).get("archiveTasks")
+        )
         for lane in lanes:
             lane_id = str(lane.get("id"))
             record = current_records.get(lane_id)
@@ -424,58 +669,9 @@ def validate_ledger(
                     "included lane requires deployment evidence",
                 )
 
-            retirement = _mapping(lane.get("retirement"))
-            retirement_disposition = retirement.get("disposition")
-            if retirement_disposition not in RETIREMENT_STATUS:
-                add(
-                    "deployed-lane-missing-retirement",
-                    f"lanes[{lane_id}].retirement.disposition",
-                    "deployed lane requires a recognized retirement disposition",
-                )
-            else:
-                expected_status = RETIREMENT_STATUS[retirement_disposition]
-                if lane.get("status") != expected_status:
-                    add(
-                        "retirement-status-mismatch",
-                        f"lanes[{lane_id}].status",
-                        f"{retirement_disposition} requires lane status {expected_status}",
-                    )
-                if retirement_disposition in BLOCKED_RETIREMENT and not _present(
-                    retirement.get("blockerReason")
-                ):
-                    add(
-                        "missing-retirement-blocker",
-                        f"lanes[{lane_id}].retirement.blockerReason",
-                        f"{retirement_disposition} requires a precise blocker",
-                    )
-
-            placement = _mapping(lane.get("placement"))
-            policy = placement.get("retirementPolicy")
-            task = _mapping(lane.get("task"))
-            if isinstance(policy, str) and policy.startswith("archive-app-task"):
-                archive_state = task.get("archiveState")
-                if archive_authority.get("state") == "authorized":
-                    if archive_state not in {"requested", "archived", "verification-failed"}:
-                        add(
-                            "archive-policy-not-executed",
-                            f"lanes[{lane_id}].task.archiveState",
-                            "archive policy is not automation; authorized archive was not requested",
-                        )
-                elif not _present(retirement.get("blockerReason")):
-                    add(
-                        "archive-authority-unresolved",
-                        f"lanes[{lane_id}].retirement.blockerReason",
-                        "archive policy lacks authority and an explicit blocker",
-                    )
-
-            if retirement_disposition == "app-cleanup-pending" and task.get(
-                "archiveState"
-            ) not in {"requested", "verification-failed"}:
-                add(
-                    "cleanup-pending-without-archive-request",
-                    f"lanes[{lane_id}].task.archiveState",
-                    "app-cleanup-pending requires an archive request or failed read-back",
-                )
+            _validate_retirement(
+                lane, archive_authority, add, "deployed-lane-missing-retirement"
+            )
 
     return sorted(issues)
 
@@ -493,9 +689,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("ledger", help="JSON ledger path, or - for standard input")
     parser.add_argument(
-        "--phase", required=True, choices=("pre-deploy", "post-deploy")
+        "--phase", required=True, choices=("pre-deploy", "post-deploy", "final")
     )
-    parser.add_argument("--batch-id", help="release batch id; defaults to activeBatchId")
+    parser.add_argument(
+        "--batch-id", help="release batch id; defaults to activeBatchId"
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -511,7 +709,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{issue.code}\t{issue.path}\t{issue.message}")
         return 1
 
-    print(f"PASS phase={args.phase} batch={args.batch_id or _mapping(_mapping(payload.get('delivery')).get('release')).get('activeBatchId')}")
+    print(
+        f"PASS phase={args.phase} batch={args.batch_id or _mapping(_mapping(payload.get('delivery')).get('release')).get('activeBatchId')}"
+    )
     return 0
 
 

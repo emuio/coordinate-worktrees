@@ -48,7 +48,7 @@ After every merged or explicitly abandoned lane, after every verified deployment
 
 1. Refresh review state and target containment. Do not rely on the lane's earlier report.
 2. Refresh the owning task state and archive state when relevant.
-3. Refresh the exact worktree mapping, path, branch, HEAD, and clean status when the worktree still exists.
+3. Refresh the exact worktree mapping, path, branch, HEAD, and clean status when the worktree still exists. After an archive request, read back both task archive state and the path/Git mapping on the owning host. Record timestamped observations in `retirement.evidence`, plus `nextAction` and the responsible party; report an inaccessible host as an evidence blocker.
 4. Compare all evidence with the ledger and classify exactly one disposition:
    - `manual-retired`: authorized cleanup of a coordinator-manual worktree completed and the ledger was updated;
    - `cleanup-ready`: all safety checks pass, but authorized cleanup has not executed;
@@ -61,6 +61,15 @@ After every merged or explicitly abandoned lane, after every verified deployment
 5. Report a `Worktree cleanup` section with each absolute path when one exists, classification, worktree kind, branch disposition, recovery ref or snapshot state, blocker, and next action. Report App-removed paths as historical paths rather than fabricating a current mapping.
 
 After a deployment, apply this checkpoint to every included lane in the active release batch, not only lanes merged during the current coordinator turn. Before reporting the release complete, verify that each included lane's accepted HEAD maps through its recorded integrated commit to the exact deployed release. A lane that is deployed but lacks a retirement disposition or precise blocker fails the post-deploy gate.
+
+## Report reconciliation
+
+After every confirmed merge or verified deployment, and before the final report, render the complete ledger as a reconciliation table:
+
+| Lane / task ID @ host | Branch / source HEAD | Worktree path / kind / path state | Accepted HEAD | Integrated commit | Deployed target / release | Replacement lane | Retirement disposition / next action |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+
+Use the existing ledger values; mark unavailable or inapplicable values explicitly. Keep historical paths identifiable. Include previously merged, abandoned, and replaced lanes, not only this turn's work. A remaining worktree requires a verified disposition, not automatic failure or deletion. Before the final report run `validate_ledger.py --phase final`; report pending cleanup separately from delivered functionality.
 
 ## Retire App-managed and permanent worktrees
 
@@ -79,6 +88,7 @@ Remove a manual worktree only when all of the following hold:
 - `removeManualWorktrees` is authorized;
 - the review is merged, or abandonment is explicit and the lane HEAD is preserved on a recoverable remote ref;
 - for a merge or fast-forward integration, the intended target contains the delivered HEAD or recorded merge commit;
+- for an explicitly abandoned source replaced by another lane, verify the ledger replacement evidence and recoverable old HEAD; report it as replaced, never as merged solely because functionality exists elsewhere;
 - for a squash or rebase integration that does not contain the source HEAD, authoritative review state identifies the resulting commit, that commit is contained in the intended target, and the source HEAD remains on a recoverable ref;
 - no task or workflow owns the lane;
 - `git worktree list --porcelain` maps the exact absolute path to the expected branch and HEAD;

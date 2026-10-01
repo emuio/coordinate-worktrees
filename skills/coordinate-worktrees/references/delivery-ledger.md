@@ -149,7 +149,10 @@ lanes:
         deploymentVerified: null
         deploymentEvidence: []
     status: planned
+    replacement: null  # optional; see Replacement evidence
     retirement:
+      evidence: []
+      nextAction: null
       disposition: null
       blockerReason: null
       recoveryRef: null
@@ -249,6 +252,37 @@ effects: []
 - Retirement dispositions are defined in [the base synchronization and retirement protocol](base-sync-and-retirement.md). Do not invent a success classification when evidence is incomplete.
 - Map `manual-retired` and `app-auto-cleaned-restorable` to lane status `retired`; map `cleanup-ready` and `app-cleanup-pending` to `retirement-pending`; map dirty, active, or blocked retention to `retained-blocked`; map `permanent-retained` to `retained-permanent` without inventing a blocker.
 - `task.archiveState` is `not-requested`, `requested`, `archived`, or `verification-failed`. `placement.pathState` is `unknown`, `current`, or `historical`. `retirement.snapshotState` is `unknown`, `not-applicable`, `preserved`, or `missing`.
+
+### Replacement evidence
+
+Record an optional lane-level `replacement` only when another lane replaces this source. Do not mix branch purpose, a wrong-base diagnosis, and replacement state into one role enum. Preserve the original lane, branch, and HEAD; reuse `integratedCommit` for actual integration rather than introducing `integratedAs`.
+
+```yaml
+replacement:
+  supersededBy: replacement-lane-id
+  kind: functional-replacement
+  reason: old implementation used the wrong base
+  sourceHead: exact-old-head
+  replacementHead: exact-accepted-replacement-head
+  scopeEvidence: []
+  acceptanceEvidence: []
+```
+
+- `supersededBy` references another existing lane ID; self references and cycles are invalid.
+- Use `patch-equivalent` only with comparison evidence for explicit source and target ranges (for example stable patch IDs or a range comparison with every difference reviewed). An ancestor test alone cannot prove or disprove patch equivalence.
+- Use `functional-replacement` for reimplementation. Record requirement/scope correspondence, deliberate omissions, coordinator acceptance, and relevant test results; similar intent or passing unrelated tests is insufficient.
+- Bind evidence to `sourceHead` and the replacement lane's current coordinator-accepted `replacementHead`. Preserve the old source HEAD using `retirement.recoveryRef`.
+- Replacement is not a merge claim or deletion authorization. Keep the old lane explicitly abandoned or retained with a reason; when it is excluded from a release, use a reasoned `not-applicable` record. Prove actual integration and deployment through the replacement lane's existing release records.
+
+### Retirement evidence and final gate
+
+- `retirement.evidence` records current task/archive read-back and worktree observations with the exact host, path, command or operation, result, and observation time. Refresh after archive; an archive receipt alone does not prove physical cleanup.
+- `retirement.nextAction` names the pending action and responsible party (App, coordinator, or user), or explicitly says `none` when settled. Unknown paths and blocked retention require a precise `blockerReason`.
+- Removed paths are `historical`; known existing paths are `current`. `app-auto-cleaned-restorable` requires verified archive and `snapshotState: preserved`. If snapshot preservation is unverified, retain pending state and record the evidence gap.
+- `app-cleanup-pending` permits `archiveState: requested`, `archived`, or `verification-failed`. A verified archive with a remaining directory is a platform cleanup pending item, not a reason to retry archive or manually remove the directory.
+- Run `--phase final` against the complete ledger before the final report, even without a release batch. It checks every reconciliable lane, terminal/archived task, and replaced lane, including abandoned and previously deployed work. Active work may remain; report it explicitly rather than claiming the whole delivery is complete.
+- An authorized archive may remain unattempted only with an explicit blocked-retention disposition and precise safety or ownership blocker; a free-text note on a success disposition is insufficient.
+- The final gate checks recorded dispositions and evidence, not zero remaining worktrees. Pending or justified retention can pass reconciliation but is not completed cleanup. It does not replace deployment gates or perform live Git/App verification; the coordinator must collect and assess evidence.
 
 ### Coordinator handoff
 

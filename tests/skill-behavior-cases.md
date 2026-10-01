@@ -254,3 +254,15 @@ Variants:
 - Two review/fix cycles fail and expose unresolved design ambiguity. Reclassify the follow-up as `critical`; do not interrupt a currently running turn solely to change settings.
 - When the user explicitly prioritizes economy or high throughput without pinning an exact model, Terra may handle bounded implementation with reliable verification and Luna may handle repetitive mechanical work with deterministic checks; preserve the risk-based effort floor and record the exception source.
 - When the user explicitly requests configured defaults, set `modelRouting.mode=configured-default` and omit App task model and reasoning overrides. Exact user pins instead use `explicit-pins`.
+
+## Final reconciliation without deployment
+
+Scenario: one lane was reimplemented from the correct base, the old lane was explicitly abandoned, and the replacement was merged. No deployment was requested. The old App task is archived but its worktree still exists.
+
+Expected behavior:
+- Preserve both lanes and bind replacement evidence to the old source HEAD and the accepted replacement HEAD; distinguish functional replacement from patch equivalence.
+- Read back task archive state and worktree mapping on the owning host. Record the old lane as app-cleanup-pending with the observed path and platform cleanup next action.
+- Run the final validator without creating a release batch. Include both lanes in the reconciliation table.
+- Do not claim the old branch was merged, repeat archive, or manually remove the App worktree.
+
+Required evidence: exact lane/task identities, old recovery ref, replacement scope and acceptance evidence, archive and path read-back, final gate result, and pending cleanup owner.
